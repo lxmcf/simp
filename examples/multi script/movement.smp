@@ -1,0 +1,16 @@
+let speed = 3.5
+let direction = 1
+
+while true then
+    player_x = player_x + (speed * direction)
+
+    if player_x > 700 then
+        direction = -1
+    end
+
+    if player_x < 100 then
+        direction = 1
+    end
+
+    sleep 0
+end

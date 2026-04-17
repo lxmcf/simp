@@ -1,0 +1,12 @@
+let x = 400
+let y = 300
+
+while true then
+    if is_key_down("SPACE") then
+        y = y - 5
+    end
+
+    draw_circle(x, y, 50)
+
+    sleep 0
+end
