@@ -282,28 +282,41 @@ _has_var :: proc(state: ^State, name: string) -> bool {
 }
 
 _get_var :: proc(state: ^State, name: string) -> Value {
-    for scope_index := len(state.scopes) - 1; scope_index >= 0; scope_index -= 1 {
+    scopes_len := len(state.scopes)
+    if scopes_len == 0 {
+        return DEFAULT_VALUE
+    }
+
+    if existing_slot, exists := state.scopes[scopes_len - 1][name]; exists {
+        return _resolve_pointer_value(existing_slot)
+    }
+
+    for scope_index := scopes_len - 2; scope_index >= 0; scope_index -= 1 {
         if existing_slot, exists := state.scopes[scope_index][name]; exists {
-            #partial switch actual_value in existing_slot.value {
-            case ^f64:
-                return actual_value^
-
-            case ^int:
-                return actual_value^
-
-            case ^string:
-                return actual_value^
-
-            case ^bool:
-                return actual_value^
-
-            case:
-                return existing_slot.value
-            }
+            return _resolve_pointer_value(existing_slot)
         }
     }
 
     return DEFAULT_VALUE
+}
+
+_resolve_pointer_value :: #force_inline proc "contextless" (slot: Variable_Slot) -> Value {
+    #partial switch actual_value in slot.value {
+    case ^f64:
+        return actual_value^
+
+    case ^int:
+        return actual_value^
+
+    case ^string:
+        return actual_value^
+
+    case ^bool:
+        return actual_value^
+
+    case:
+        return slot.value
+    }
 }
 
 _set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = false) {

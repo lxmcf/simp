@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
+import db "debug"
 
 // TODO: Actually use proper platform code
 when ODIN_OS == .Windows {
@@ -107,6 +108,13 @@ run_compile_logic :: proc(input_path: string, output_path: string) {
 }
 
 main :: proc() {
+    when ODIN_DEBUG {
+        context.allocator = db.init_allocator()
+        defer db.unload_allocator()
+    } else {
+        _ :: db
+    }
+
     state: simp.State
     simp.init_interpreter(&state)
     defer simp.destroy_interpreter(&state)
@@ -119,6 +127,7 @@ main :: proc() {
     lib.load_math_library(&state)
     lib.load_strings_library(&state)
     lib.load_struct_library(&state)
+    lib.load_io_library(&state)
 
     command_line_arguments := os.args
 
