@@ -41,6 +41,7 @@ Token_Type :: distinct enum {
     StarEquals,
     SlashEquals,
     PercentEquals,
+    Ellipsis,
 }
 
 Token_Keyword :: distinct enum {
@@ -77,6 +78,7 @@ Token_Keyword :: distinct enum {
     Null,
     Object,
     Array,
+    Ellipsis,
 
     // TYPES
     Int,
@@ -271,7 +273,10 @@ _tokenize :: proc(state: ^State, script: string) -> ([]Token, bool) {
             char_index += 1
 
         case '.':
-            if char_index + 1 < len(script) && _is_digit(script[char_index + 1]) {
+            if char_index + 2 < len(script) && script[char_index + 1] == '.' && script[char_index + 2] == '.' {
+                append(&tokens, Token{type = .Ellipsis, keyword = .Ellipsis, text = "...", line = line_number})
+                char_index += 3
+            } else if char_index + 1 < len(script) && _is_digit(script[char_index + 1]) {
                 start_index := char_index
                 dot_count := 1
                 char_index += 1
@@ -595,7 +600,6 @@ _tokenize :: proc(state: ^State, script: string) -> ([]Token, bool) {
                 case:
                     append(&tokens, Token{type = .Ident, keyword = keyword, text = identifier_text, line = line_number})
                 }
-
             } else {
                 error_message := fmt.aprintf("Unrecognized character '%c'", character)
                 state.log_proc(.Error, error_message, line_number)

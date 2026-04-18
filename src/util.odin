@@ -173,62 +173,94 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
 
         case .Type:
             return "type"
+
+        case .Ellipsis:
+            return "..."
         }
     }
 
     #partial switch token_type {
     case .Plus:
         return "+"
+
     case .Minus:
         return "-"
+
     case .Star:
         return "*"
+
     case .Slash:
         return "/"
+
     case .Equals:
         return "="
+
     case .DoubleEquals:
         return "=="
+
     case .NotEqual:
         return "!="
+
     case .Less:
         return "<"
+
     case .Greater:
         return ">"
+
     case .LessEqual:
         return "<="
+
     case .GreaterEqual:
         return ">="
+
     case .LParen:
         return "("
+
     case .RParen:
         return ")"
+
     case .Comma:
         return ","
+
     case .Colon:
         return ":"
+
     case .DoubleColon:
         return "::"
+
     case .Newline:
         return "\n"
+
     case .LBracket:
         return "["
+
     case .RBracket:
         return "]"
+
     case .Dot:
         return "."
+
     case .Percent:
         return "%"
+
     case .PlusEquals:
         return "+="
+
     case .MinusEquals:
         return "-="
+
     case .StarEquals:
         return "*="
+
     case .SlashEquals:
         return "/="
+
     case .PercentEquals:
         return "%="
+
+    case .Ellipsis:
+        return "..."
+
     case .EOF:
         return "EOF"
     }

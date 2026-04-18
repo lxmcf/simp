@@ -192,6 +192,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     case .Put:
         evaluated_value := _parse_expression(state, parser)
         fmt.print(value_to_string(evaluated_value))
+
         return "", true
 
     case .Sleep:
@@ -512,8 +513,19 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         arguments := make([dynamic]string, context.temp_allocator)
 
-        for _peek_ahead(parser).type == .Ident {
-            append(&arguments, _advance(parser).text)
+        for _peek_ahead(parser).type == .Ident || _peek_ahead(parser).type == .Ellipsis {
+            next_token := _advance(parser)
+
+            if next_token.type == .Ellipsis {
+                append(&arguments, "...")
+
+                if _peek_ahead(parser).type == .Comma {
+                    return fmt.tprintf("'...' must be the last argument in function '%s'", name), false
+                }
+                break
+            }
+
+            append(&arguments, next_token.text)
             if _peek_ahead(parser).type == .Comma {
                 _advance(parser)
             }
@@ -752,6 +764,9 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
     value: Value = DEFAULT_VALUE
 
     #partial switch token.type {
+    case .Ellipsis:
+        value = _get_var(state, "...")
+
     case .Number:
         if strings.contains(token.text, ".") {
             parsed_value, _ := strconv.parse_f64(token.text)
@@ -1263,7 +1278,19 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
     }
 
     for argument, argument_index in function.arguments {
-        if argument_index < len(arguments) {
+        if argument == "..." {
+            var_array := create_array(state)
+            for i := argument_index; i < len(arguments); i += 1 {
+                append(var_array, arguments[i])
+            }
+
+            local_scope["..."] = Variable_Slot {
+                value    = var_array,
+                is_const = true,
+            }
+            break
+
+        } else if argument_index < len(arguments) {
             local_scope[argument] = Variable_Slot {
                 value    = arguments[argument_index],
                 is_const = false,
@@ -1313,7 +1340,25 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
     state.is_returning = false
     state.return_value = DEFAULT_VALUE
 
-    append(&state.scope_pool, pop(&state.scopes))
+    popped_scope := pop(&state.scopes)
+
+    if variadic_slot, has_variadic := popped_scope["..."]; has_variadic {
+        if array_ref, is_array := variadic_slot.value.(^Array); is_array {
+            is_escaping := false
+
+            if result_array, result_is_array := result.(^Array); result_is_array && result_array == array_ref {
+                is_escaping = true
+            }
+
+            if !is_escaping {
+                free_array(state, array_ref)
+            }
+        }
+
+        delete_key(&popped_scope, "...")
+    }
+
+    append(&state.scope_pool, popped_scope)
 
     parser.position = old_position
 
