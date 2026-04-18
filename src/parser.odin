@@ -805,6 +805,9 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
         case .Type:
             value = Type_Value.Type
 
+        case .Function:
+            value = Type_Value.Function
+
         case .Array:
             new_array := create_array(state)
 
@@ -864,16 +867,33 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
         case .None:
             name := token.text
             if (name in state.native_procs) || (name in state.functions) {
-                new_value, success := _evaluate_function_call(state, parser, name)
-                if !success {
-                    message := fmt.aprintf("Expected '(' after function '%s'", name)
-                    state.log_proc(.Fatal, message, token.line)
-                    state.should_close = true
+                if _peek_ahead(parser).type == .DoubleColon {
+                    _advance(parser) // skip ::
+                    type_token := _advance(parser)
 
-                    delete(message)
-                    return DEFAULT_VALUE
+                    if type_token.text == "type" {
+                        value = Type_Value.Function
+                    } else {
+                        error_message := fmt.aprintf("Unknown property '%s' for function '%s'", type_token.text, name)
+                        state.log_proc(.Error, error_message, type_token.line)
+                        delete(error_message)
+                        state.should_close = true
+
+                        return DEFAULT_VALUE
+                    }
+                } else {
+                    new_value, success := _evaluate_function_call(state, parser, name)
+                    if !success {
+                        message := fmt.aprintf("Expected '(' after function '%s'", name)
+                        state.log_proc(.Fatal, message, token.line)
+                        state.should_close = true
+                        delete(message)
+
+                        return DEFAULT_VALUE
+                    }
+
+                    value = new_value
                 }
-                value = new_value
             } else {
                 if _peek_ahead(parser).type == .LParen {
                     message := fmt.aprintf("Attempted to call unknown function '%s'", name)

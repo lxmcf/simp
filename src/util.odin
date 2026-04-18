@@ -66,6 +66,9 @@ _to_key :: proc(value: Value) -> string {
         case .Null:
             return "null"
 
+        case .Function:
+            return "function"
+
         case .Type:
             return "type"
 

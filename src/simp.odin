@@ -25,6 +25,7 @@ Type_Value :: enum {
     Object,
     Array,
     Null,
+    Function,
     Type,
 }
 
