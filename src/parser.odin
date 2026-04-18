@@ -227,6 +227,16 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 return fmt.tprintf("Variable '%s' is not an object or array and cannot be deleted", target_identifier), false
             }
+        } else if target_identifier in state.functions {     // User function
+            function := &state.functions[target_identifier]
+
+            for argument in function.arguments {
+                delete(argument)
+            }
+
+            delete_key(&state.functions, target_identifier)
+        } else if target_identifier in state.native_procs {     // Bound function
+            delete_key(&state.native_procs, target_identifier)
         } else {
             return fmt.tprintf("Cannot delete: Variable '%s' does not exist", target_identifier), false
         }
@@ -509,6 +519,11 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
     case .Function:
         name := _advance(parser).text
+
+        if (name in state.functions || name in state.native_procs) {
+            return fmt.tprintf("function '%s' is already defined!", name), false
+        }
+
         _advance(parser) // (
 
         arguments := make([dynamic]string, context.temp_allocator)
