@@ -3,8 +3,6 @@ package lib
 import simp "../"
 import "core:strings"
 
-STRINGS_VERSION :: 100
-
 load_strings_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "sub", fn_sub)
     simp.register_native_proc(state, "replace", fn_replace)
@@ -12,9 +10,6 @@ load_strings_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "lower", fn_lower)
     simp.register_native_proc(state, "trim", fn_trim)
     simp.register_native_proc(state, "contains", fn_contains)
-
-    @(static) version := STRINGS_VERSION
-    simp.bind_int(state, "STRINGS_VERSION", &version, true)
 }
 
 // sub(text, start, length) -> "llo"

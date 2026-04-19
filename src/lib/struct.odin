@@ -2,15 +2,10 @@ package lib
 
 import simp "../"
 
-STRUCTS_VERSION :: 100
-
 load_struct_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "has_key", fn_has_key)
     simp.register_native_proc(state, "push", fn_push)
     simp.register_native_proc(state, "pop", fn_pop)
-
-    @(static) version := STRUCTS_VERSION
-    simp.bind_int(state, "STRUCTS_VERSION", &version, true)
 }
 
 // has_key(object_reference, "key")

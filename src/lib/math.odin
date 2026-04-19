@@ -4,7 +4,6 @@ import simp "../"
 import "core:math"
 import "core:math/rand"
 
-MATH_VERSION :: 100
 
 load_math_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "rand", fn_rand)
@@ -18,9 +17,6 @@ load_math_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "floor", fn_floor)
     simp.register_native_proc(state, "ceil", fn_ceil)
     simp.register_native_proc(state, "round", fn_round)
-
-    @(static) version := MATH_VERSION
-    simp.bind_int(state, "MATH_VERSION", &version, true)
 }
 
 // RAND() -> 0.0 to 1.0 (f64)
