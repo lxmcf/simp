@@ -135,6 +135,20 @@ pop_array :: proc(arguments: ^[]Value) -> (^Array, bool) {
     return nil, false
 }
 
+pop_rawptr :: proc(arguments: ^[]Value) -> (rawptr, bool) {
+    if len(arguments^) == 0 {
+        return nil, false
+    }
+
+    #partial switch actual_value in arguments^[0] {
+    case rawptr:
+        arguments^ = arguments^[1:]
+        return actual_value, true
+    }
+
+    return nil, false
+}
+
 values_are_equal :: proc(left: Value, right: Value) -> bool {
     left_number, is_left_valid := get_as_f64(left)
     right_number, is_right_valid := get_as_f64(right)
@@ -283,6 +297,9 @@ value_to_string :: proc(value: Value) -> string {
 
         case .Array:
             return "array"
+
+        case .Pointer:
+            return "pointer"
 
         case .Null:
             return "null"

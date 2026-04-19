@@ -4,7 +4,6 @@ import simp "../"
 import "core:math"
 import "core:math/rand"
 
-
 load_math_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "rand", fn_rand)
     simp.register_native_proc(state, "abs", fn_abs)

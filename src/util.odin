@@ -63,6 +63,9 @@ _to_key :: proc(value: Value) -> string {
         case .Array:
             return "array"
 
+        case .Pointer:
+            return "pointer"
+
         case .Null:
             return "null"
 
@@ -449,6 +452,9 @@ _is_truthy :: proc(value: Value) -> bool {
 
     case ^Array:
         return true
+
+    case rawptr:
+        return raw_value != nil
 
     case Null_Value:
         return false

@@ -53,6 +53,7 @@ main :: proc() {
     rl.InitWindow(800, 600, "SIMP: Multi-Script Example")
     rl.SetTargetFPS(60)
 
+    // This is purely for an example, would suggest an array or map
     script_movement: Script
     script_rainbow: Script
 

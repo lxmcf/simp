@@ -123,19 +123,9 @@ main :: proc() {
     simp.register_native_proc(&state, "exit", cmd_quit)
     simp.register_native_proc(&state, "vars", cmd_vars)
 
-    // TODO: Add 'load_standard_library proc'
-    lib.load_math_library(&state)
-    lib.load_strings_library(&state)
-    lib.load_struct_library(&state)
-    lib.load_io_library(&state)
+    lib.load_standard_library(&state)
 
     command_line_arguments := os.args
-
-    test_float: f32
-    // test_int: i32
-
-    simp.bind_variable(&state, "test_float", &test_float)
-    simp.bind_variable(&state, "test_float", 1.0)
 
     if len(command_line_arguments) == 1 {
         run_repl(&state)

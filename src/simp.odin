@@ -17,6 +17,13 @@ DEFAULT_VALUE :: Null_Value{}
 Object :: map[string]Value
 Array :: [dynamic]Value
 
+// TODO: Add this
+//
+// NOTE: Mostly intended for io operations or more memory
+//       efficient string slicing
+@(private)
+Buffer :: []u8
+
 Type_Value :: enum {
     Int,
     Float,
@@ -24,12 +31,15 @@ Type_Value :: enum {
     Bool,
     Object,
     Array,
+    // Buffer,
+    Pointer,
     Null,
     Function,
     Type,
 }
 
-Null_Value :: struct {}
+// Effectively a 'nil'
+Null_Value :: distinct struct{}
 
 Value :: union {
     Null_Value,
@@ -39,6 +49,8 @@ Value :: union {
     bool,
     ^Object,
     ^Array,
+    // ^Buffer,
+    rawptr, // Intended for better SIMP -> Odin/C interop
     ^f64,
     ^f32,
     ^int,
@@ -72,6 +84,7 @@ State :: struct {
     argument_stack:   [dynamic]Value,
     tracked_objects:  map[^Object]bool,
     tracked_arrays:   map[^Array]bool,
+    // tracked_buffers:  map[^Buffer]bool,
 
     // Performance Optimization
     jump_table:       map[int]int,
