@@ -180,15 +180,11 @@ run_repl :: proc(state: ^simp.State) {
         for command in command_history {
             delete(command)
         }
-
         delete(command_history)
     }
 
     script_accumulator := strings.builder_make()
-    persistent_definitions := strings.builder_make()
-
     defer strings.builder_destroy(&script_accumulator)
-    defer strings.builder_destroy(&persistent_definitions)
 
     block_depth := 0
 
@@ -228,26 +224,11 @@ run_repl :: proc(state: ^simp.State) {
 
         if block_depth == 0 {
             full_code := strings.to_string(script_accumulator)
-            trimmed_code := strings.trim_space(full_code)
 
-            is_definition := strings.has_prefix(trimmed_code, "function ") || strings.has_prefix(trimmed_code, "function(") || strings.has_prefix(trimmed_code, "import ")
+            simp.execute_snippet(state, full_code, os.args[0])
 
-            if is_definition {
-                simp.execute_script(state, full_code, "REPL")
-
-                if state.should_close {
-                    state.should_close = false
-                } else {
-                    strings.write_string(&persistent_definitions, full_code)
-                    strings.write_string(&persistent_definitions, "\n")
-                }
-            } else {
-                final_script := fmt.tprintf("%s\n%s", strings.to_string(persistent_definitions), full_code)
-                simp.execute_script(state, final_script, "REPL")
-
-                if state.should_close {
-                    state.should_close = false
-                }
+            if state.should_close {
+                state.should_close = false
             }
 
             os.flush(os.stdout)

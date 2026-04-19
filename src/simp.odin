@@ -258,6 +258,94 @@ execute_script_from_file :: proc(state: ^State, filename: string) {
     }
 }
 
+evaluate_script :: proc(state: ^State, script_data: string, filename: string = "eval") -> bool {
+    magic_header_length := len(MAGIC_HEADER)
+    is_binary := len(script_data) >= magic_header_length && script_data[:magic_header_length] == MAGIC_HEADER
+
+    if is_binary {
+        state.log_proc(.Error, "Cannot evaluate bytecode!", -1)
+        return false
+    }
+
+    visited_files := make(map[string]bool, 16, context.temp_allocator)
+    temporary_tokens, ok := _tokenize_and_resolve(state, script_data, filename, &visited_files)
+
+    if !ok {
+        state.should_close = false
+        return false
+    }
+
+    if state.tokens == nil {
+        state.tokens = make([dynamic]Token, state.allocator)
+    }
+
+    offset := len(state.tokens)
+
+    computed_jump_table, computed_break_table, computed_continue_table := _compute_tables(temporary_tokens, context.temp_allocator)
+
+    if state.jump_table == nil {
+        state.jump_table = make(map[int]int, 16, state.allocator)
+        state.break_table = make(map[int]int, 16, state.allocator)
+        state.continue_table = make(map[int]int, 16, state.allocator)
+    }
+
+    for key, value in computed_jump_table {
+        state.jump_table[key + offset] = value + offset
+    }
+
+    for key, value in computed_break_table {
+        state.break_table[key + offset] = value + offset
+    }
+
+    for key, value in computed_continue_table {
+        state.continue_table[key + offset] = value + offset
+    }
+
+    for t in temporary_tokens {
+        append(&state.tokens, t)
+    }
+
+    state.position = offset
+    state.is_sleeping = false
+    state.sleep_timer = 0
+    state.should_close = false
+
+    return true
+}
+
+execute_snippet :: proc(state: ^State, script: string, filename: string = "eval") {
+    old_position := state.position
+    old_is_sleeping := state.is_sleeping
+    old_sleep_timer := state.sleep_timer
+    old_should_close := state.should_close
+    old_len := len(state.tokens)
+
+    defer {
+        if old_position >= old_len {
+            state.position = len(state.tokens)
+        } else {
+            state.position = old_position
+        }
+        state.is_sleeping = old_is_sleeping
+        state.sleep_timer = old_sleep_timer
+        state.should_close = old_should_close
+    }
+
+    if !evaluate_script(state, script, filename) {
+        return
+    }
+
+    for step_state(state, 0.016, 10_000_000) {
+        if state.is_sleeping && state.sleep_timer > 0 {
+            sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
+            time.sleep(sleep_duration)
+
+            state.sleep_timer = 0
+            state.is_sleeping = false
+        }
+    }
+}
+
 step_state :: proc(state: ^State, delta_time: f64, max_operations: int = 256) -> bool {
     if state.should_close || state.position >= len(state.tokens) {
         return false
