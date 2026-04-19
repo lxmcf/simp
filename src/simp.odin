@@ -40,7 +40,9 @@ Value :: union {
     ^Object,
     ^Array,
     ^f64,
+    ^f32,
     ^int,
+    ^i32,
     ^string,
     ^bool,
     Type_Value,
@@ -49,6 +51,7 @@ Value :: union {
 Variable_Slot :: struct {
     value:    Value,
     is_const: bool,
+    decl_pc:  int, // Decleration position
 }
 
 

@@ -131,6 +131,12 @@ main :: proc() {
 
     command_line_arguments := os.args
 
+    test_float: f32
+    // test_int: i32
+
+    simp.bind_variable(&state, "test_float", &test_float)
+    simp.bind_variable(&state, "test_float", 1.0)
+
     if len(command_line_arguments) == 1 {
         run_repl(&state)
         return

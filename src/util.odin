@@ -308,8 +308,14 @@ _resolve_pointer_value :: #force_inline proc "contextless" (slot: Variable_Slot)
     case ^f64:
         return actual_value^
 
+    case ^f32:
+        return f64(actual_value^)
+
     case ^int:
         return actual_value^
+
+    case ^i32:
+        return int(actual_value^)
 
     case ^string:
         return actual_value^
@@ -322,30 +328,50 @@ _resolve_pointer_value :: #force_inline proc "contextless" (slot: Variable_Slot)
     }
 }
 
-_set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = false) {
+_get_slot :: proc(state: ^State, name: string) -> (Variable_Slot, bool) {
+    for scope_index := len(state.scopes) - 1; scope_index >= 0; scope_index -= 1 {
+        if existing_slot, exists := state.scopes[scope_index][name]; exists {
+            return existing_slot, true
+        }
+    }
+    return Variable_Slot{}, false
+}
+
+_set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = false, decl_pc: int = -1) {
     if name == "_" {
         return
     }
 
     for scope_index := len(state.scopes) - 1; scope_index >= 0; scope_index -= 1 {
         if existing_slot, exists := state.scopes[scope_index][name]; exists {
-            if existing_slot.is_const {
+            if existing_slot.is_const && existing_slot.decl_pc != decl_pc {
                 state.log_proc(.Error, fmt.tprintf("Cannot reassign constant variable '%s'", name))
                 state.should_close = true
-
                 return
             }
 
             #partial switch target in existing_slot.value {
             case ^f64:
-                if value_float, is_float := value.(f64); is_float {
+                if value_float, is_float := get_as_f64(value); is_float {
                     target^ = value_float
                     return
                 }
 
+            case ^f32:
+                if value_float, is_float := get_as_f64(value); is_float {
+                    target^ = f32(value_float)
+                    return
+                }
+
             case ^int:
-                if value_integer, is_integer := value.(int); is_integer {
+                if value_integer, is_integer := get_as_int(value); is_integer {
                     target^ = value_integer
+                    return
+                }
+
+            case ^i32:
+                if value_integer, is_integer := get_as_int(value); is_integer {
+                    target^ = i32(value_integer)
                     return
                 }
 
@@ -370,6 +396,7 @@ _set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = fal
                 state.scopes[scope_index][name] = Variable_Slot {
                     value    = value_to_store,
                     is_const = is_const,
+                    decl_pc  = existing_slot.decl_pc,
                 }
 
                 return
@@ -387,6 +414,7 @@ _set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = fal
     state.scopes[len(state.scopes) - 1][persistent_name] = Variable_Slot {
         value    = value_to_store,
         is_const = is_const,
+        decl_pc  = decl_pc,
     }
 }
 
@@ -398,10 +426,16 @@ _is_truthy :: proc(value: Value) -> bool {
     case ^f64:
         return raw_value^ != 0
 
+    case ^f32:
+        return raw_value^ != 0
+
     case int:
         return raw_value != 0
 
     case ^int:
+        return raw_value^ != 0
+
+    case ^i32:
         return raw_value^ != 0
 
     case string:

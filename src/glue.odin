@@ -9,32 +9,22 @@ register_native_proc :: proc(state: ^State, name: string, function: Native_Proc)
     state.native_procs[name] = function
 }
 
-bind_f64 :: proc(state: ^State, name: string, pointer: ^f64, is_const := false) {
-    state.scopes[0][name] = Variable_Slot {
-        value    = pointer,
-        is_const = is_const,
-    }
-}
+bind_variable :: proc(state: ^State, name: string, value: Value, is_const := false) -> bool {
+    if name not_in state.scopes[0] {
+        state.scopes[0][name] = Variable_Slot {
+            value    = value,
+            is_const = is_const,
+            decl_pc  = -1,
+        }
 
-bind_string :: proc(state: ^State, name: string, pointer: ^string, is_const := false) {
-    state.scopes[0][name] = Variable_Slot {
-        value    = pointer,
-        is_const = is_const,
+        return true
+    } else {
+        message := fmt.aprintf("Unable to bind variables with name '%s' as it already exists!", name)
+        state.log_proc(.Warning, message)
+        delete(message)
     }
-}
 
-bind_bool :: proc(state: ^State, name: string, pointer: ^bool, is_const := false) {
-    state.scopes[0][name] = Variable_Slot {
-        value    = pointer,
-        is_const = is_const,
-    }
-}
-
-bind_int :: proc(state: ^State, name: string, pointer: ^int, is_const := false) {
-    state.scopes[0][name] = Variable_Slot {
-        value    = pointer,
-        is_const = is_const,
-    }
+    return false
 }
 
 pop_int :: proc(arguments: ^[]Value) -> (int, bool) {
@@ -58,6 +48,32 @@ pop_float :: proc(arguments: ^[]Value) -> (f64, bool) {
     if value, success := get_as_f64(arguments^[0]); success {
         arguments^ = arguments^[1:]
         return value, true
+    }
+
+    return 0.0, false
+}
+
+pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
+    if len(arguments^) == 0 {
+        return 0, false
+    }
+
+    if value, success := get_as_int(arguments^[0]); success {
+        arguments^ = arguments^[1:]
+        return i32(value), true
+    }
+
+    return 0, false
+}
+
+pop_f32 :: proc(arguments: ^[]Value) -> (f32, bool) {
+    if len(arguments^) == 0 {
+        return 0.0, false
+    }
+
+    if value, success := get_as_f64(arguments^[0]); success {
+        arguments^ = arguments^[1:]
+        return f32(value), true
     }
 
     return 0.0, false
@@ -170,10 +186,16 @@ value_to_string :: proc(value: Value) -> string {
     case ^f64:
         return fmt.tprintf("%v", raw_value^)
 
+    case ^f32:
+        return fmt.tprintf("%v", raw_value^)
+
     case int:
         return fmt.tprintf("%v", raw_value)
 
     case ^int:
+        return fmt.tprintf("%v", raw_value^)
+
+    case ^i32:
         return fmt.tprintf("%v", raw_value^)
 
     case string:

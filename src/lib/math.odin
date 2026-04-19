@@ -19,8 +19,8 @@ load_math_library :: proc(state: ^simp.State) {
     simp.register_native_proc(state, "round", fn_round)
 }
 
-// RAND() -> 0.0 to 1.0 (f64)
-// RAND(n) -> Integer from 0 to n-1 (int)
+// rand() -> 0.0 to 1.0 (f64)
+// rand(n) -> Integer from 0 to n-1 (int)
 fn_rand :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
     args := arguments
 

@@ -4,13 +4,14 @@ let g = 0
 let b = 0
 
 while true then
-    time = time + 0.05
+    time += 0.05
 
-    r = (sin(time) + 1) * 127.5
-    g = (sin(time + 2) + 1) * 127.5
-    b = (sin(time + 4) + 1) * 127.5
+    r = (sin (time) + 1) * 127.5
+    g = (sin (time + 2) + 1) * 127.5
+    b = (sin (time + 4) + 1) * 127.5
 
-    set_color(r, g, b)
+    set_color (r, g, b)
 
+    // Halt execution for 1 step/frame
     sleep 0
 end

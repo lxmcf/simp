@@ -41,8 +41,8 @@ init_script :: proc(script: ^Script, script_path: string) -> bool {
 
     simp.register_native_proc(&script.state, "set_color", fn_set_color)
 
-    simp.bind_f64(&script.state, "player_x", &player_x)
-    simp.bind_f64(&script.state, "player_y", &player_y)
+    simp.bind_variable(&script.state, "player_x", &player_x)
+    simp.bind_variable(&script.state, "player_y", &player_y)
 
     script.is_loaded = true
 

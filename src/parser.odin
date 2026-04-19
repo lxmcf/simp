@@ -247,13 +247,15 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     case .Let:
         first_identifier := _advance(parser).text
 
-        if _has_var(state, first_identifier) {
-            return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", first_identifier), false
+        if slot, exists := _get_slot(state, first_identifier); exists {
+            if slot.decl_pc != statement_index {
+                return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", first_identifier), false
+            }
         }
 
         if _peek_ahead(parser).type == .Equals {
             _advance(parser) // Skip the =
-            _set_var(state, first_identifier, _parse_expression(state, parser))
+            _set_var(state, first_identifier, _parse_expression(state, parser), false, statement_index)
 
             return "", true
         }
@@ -268,8 +270,10 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return "Expected identifier after 'const'", false
         }
 
-        if _has_var(state, identifier_token.text) {
-            return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", identifier_token.text), false
+        if slot, exists := _get_slot(state, identifier_token.text); exists {
+            if slot.decl_pc != statement_index {
+                return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", identifier_token.text), false
+            }
         }
 
         if _peek_ahead(parser).type != .Equals {
@@ -279,7 +283,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         _advance(parser) // skip =
         evaluated_value := _parse_expression(state, parser)
 
-        _set_var(state, identifier_token.text, evaluated_value, true)
+        _set_var(state, identifier_token.text, evaluated_value, true, statement_index)
 
         return "", true
 
@@ -489,7 +493,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                 parser.position = target
 
             // NOTE: May be redundant having these here, needs more testing
-            case .If, .Else:
+            //case .If, .Else:
             // Do nothing
 
             case .Function:
@@ -1322,6 +1326,7 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
             local_scope["..."] = Variable_Slot {
                 value    = var_array,
                 is_const = true,
+                decl_pc  = -1,
             }
             break
 
@@ -1329,6 +1334,7 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
             local_scope[argument] = Variable_Slot {
                 value    = arguments[argument_index],
                 is_const = false,
+                decl_pc  = -1,
             }
         }
     }

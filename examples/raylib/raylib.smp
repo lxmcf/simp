@@ -1,12 +1,24 @@
 let x = 400
 let y = 300
 
+function reset_player ()
+    x = 400
+    y = 300
+end
+
 while true then
-    if is_key_down("SPACE") then
-        y = y - 5
+    if is_key_down ("SPACE") then
+        reset_player ()
     end
 
-    draw_circle(x, y, 50)
+    let xaxis = is_key_down ("RIGHT")::int - is_key_down ("LEFT")::int
+    let yaxis = is_key_down ("DOWN")::int - is_key_down ("UP")::int
 
+    x += xaxis * PLAYER_SPEED
+    y += yaxis * PLAYER_SPEED
+
+    draw_circle (x, y, 50)
+
+    // Halt execution for 1 step/frame
     sleep 0
 end

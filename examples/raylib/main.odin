@@ -3,6 +3,8 @@ package main
 import simp "../../src"
 import rl "vendor:raylib"
 
+PLAYER_SPEED :: 5.0
+
 fn_draw_circle :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
     if len(args) < 3 {
         return simp.DEFAULT_VALUE
@@ -10,11 +12,11 @@ fn_draw_circle :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
 
     arguments := args
 
-    x, _ := simp.pop_int(&arguments)
-    y, _ := simp.pop_int(&arguments)
-    radius, _ := simp.pop_float(&arguments)
+    x, _ := simp.pop_i32(&arguments)
+    y, _ := simp.pop_i32(&arguments)
+    radius, _ := simp.pop_f32(&arguments)
 
-    rl.DrawCircle(i32(x), i32(y), f32(radius), rl.RED)
+    rl.DrawCircle(x, y, radius, rl.RED)
 
     return simp.DEFAULT_VALUE
 }
@@ -24,16 +26,27 @@ fn_is_key_down :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
         return false
     }
 
-    key_str := simp.value_to_string(args[0])
+    key := simp.value_to_string(args[0])
 
-    if key_str == "SPACE" {
-        return bool(rl.IsKeyDown(.SPACE))
+    if key == "SPACE" {
+        return rl.IsKeyDown(.SPACE)
     }
 
-    if key_str == "UP" { return bool(rl.IsKeyDown(.UP)) }
-    if key_str == "DOWN" { return bool(rl.IsKeyDown(.DOWN)) }
-    if key_str == "LEFT" { return bool(rl.IsKeyDown(.LEFT)) }
-    if key_str == "RIGHT" { return bool(rl.IsKeyDown(.RIGHT)) }
+    if key == "UP" {
+        return rl.IsKeyDown(.UP)
+    }
+
+    if key == "DOWN" {
+        return rl.IsKeyDown(.DOWN)
+    }
+
+    if key == "LEFT" {
+        return rl.IsKeyDown(.LEFT)
+    }
+
+    if key == "RIGHT" {
+        return rl.IsKeyDown(.RIGHT)
+    }
 
     return false
 }
@@ -45,6 +58,8 @@ main :: proc() {
 
     simp.register_native_proc(&state, "draw_circle", fn_draw_circle)
     simp.register_native_proc(&state, "is_key_down", fn_is_key_down)
+
+    simp.bind_variable(&state, "PLAYER_SPEED", PLAYER_SPEED, true)
 
     simp.load_script_from_file(&state, "raylib.smp")
 
