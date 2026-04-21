@@ -9,7 +9,7 @@ player_x: f64 = 400.0
 player_y: f64 = 300.0
 player_color := rl.BLACK
 
-fn_set_color :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
+fn_set_color :: proc(state: ^simp.State, arguments: []simp.Value) {
     if len(arguments) >= 3 {
         args := arguments
 
@@ -19,8 +19,6 @@ fn_set_color :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value 
 
         player_color = rl.Color{u8(r), u8(g), u8(b), 255}
     }
-
-    return simp.DEFAULT_VALUE
 }
 
 Script :: struct {

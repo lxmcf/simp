@@ -168,8 +168,16 @@ _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) ->
     result: Value = DEFAULT_VALUE
     success := false
 
-    if native_proc_pointer, is_native_function := state.native_procs[name]; is_native_function {
-        result = native_proc_pointer(state, arguments_slice)
+    if native_proc_variant, is_native_function := state.native_procs[name]; is_native_function {
+        switch raw_proc in native_proc_variant {
+        case Native_Proc_Return:
+            result = raw_proc(state, arguments_slice)
+
+        case Native_Proc_No_Return:
+            raw_proc(state, arguments_slice)
+            result = DEFAULT_VALUE
+        }
+
         success = true
     } else if _, is_user_function := state.functions[name]; is_user_function {
         result = _call_user_function(state, parser, name, arguments_slice)

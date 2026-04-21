@@ -5,9 +5,9 @@ import rl "vendor:raylib"
 
 PLAYER_SPEED :: 5.0
 
-fn_draw_circle :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
+fn_draw_circle :: proc(state: ^simp.State, args: []simp.Value) {
     if len(args) < 3 {
-        return simp.DEFAULT_VALUE
+        return
     }
 
     arguments := args
@@ -17,8 +17,6 @@ fn_draw_circle :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
     radius, _ := simp.pop_f32(&arguments)
 
     rl.DrawCircle(x, y, radius, rl.RED)
-
-    return simp.DEFAULT_VALUE
 }
 
 fn_is_key_down :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {

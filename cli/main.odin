@@ -63,11 +63,11 @@ print_usage :: proc() {
     fmt.println("  simp help               - Show this help message")
 }
 
-cmd_quit :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
+cmd_quit :: proc(state: ^simp.State, arguments: []simp.Value) {
     os.exit(0)
 }
 
-cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
+cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
     fmt.println("\n--- Global Variables ---")
     global_scope := state.scopes[0]
 
@@ -78,8 +78,6 @@ cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
             fmt.printfln(" (%s) %s = %s", value_slot.is_const ? "C" : "M", name, simp.value_to_string(value_slot.value))
         }
     }
-
-    return simp.DEFAULT_VALUE
 }
 
 run_compile_logic :: proc(input_path: string, output_path: string) {

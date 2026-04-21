@@ -3,7 +3,13 @@ package simp
 import "core:fmt"
 import "core:strings"
 
-Native_Proc :: #type proc(state: ^State, arguments: []Value) -> Value
+Native_Proc_Return :: #type proc(state: ^State, arguments: []Value) -> Value
+Native_Proc_No_Return :: #type proc(state: ^State, arguments: []Value)
+
+Native_Proc :: union {
+    Native_Proc_No_Return,
+    Native_Proc_Return,
+}
 
 register_native_proc :: proc(state: ^State, name: string, function: Native_Proc) {
     state.native_procs[name] = function
