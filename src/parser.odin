@@ -989,8 +989,14 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
             } else if array_reference, is_array := value.(^Array); is_array {
                 if array_index, is_number := get_as_int(index_value); is_number {
-                    if array_index >= 0 && array_index < len(array_reference^) {
-                        value = array_reference^[array_index]
+                    // Resolve negative index
+                    actual_index := array_index
+                    if actual_index < 0 {
+                        actual_index += len(array_reference^)
+                    }
+
+                    if actual_index >= 0 && actual_index < len(array_reference^) {
+                        value = array_reference^[actual_index]
                     } else {
                         warning_msg := fmt.aprintf("Array index %d out of bounds (Length: %d). Returning null.", array_index, len(array_reference^))
                         state.log_proc(.Warning, warning_msg, bracket_token.line)
@@ -1003,8 +1009,14 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
             } else if string_reference, is_string := value.(string); is_string {
                 if string_index, is_number := get_as_int(index_value); is_number {
-                    if string_index >= 0 && string_index < len(string_reference) {
-                        value = string_reference[string_index:string_index + 1]
+                    // Resolve negative index
+                    actual_index := string_index
+                    if actual_index < 0 {
+                        actual_index += len(string_reference)
+                    }
+
+                    if actual_index >= 0 && actual_index < len(string_reference) {
+                        value = string_reference[actual_index:actual_index + 1]
                     } else {
                         warning_msg := fmt.aprintf("String index %d out of bounds (Length: %d). Returning null.", string_index, len(string_reference))
                         state.log_proc(.Warning, warning_msg, bracket_token.line)
@@ -1226,29 +1238,35 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                     _set_object_value(state, object_reference, key, right_value)
                 } else if array_reference, is_array := value.(^Array); is_array {
                     if array_index, is_number := get_as_int(index_value); is_number {
-                        if array_index >= 0 {
+                        // Resolve negative index
+                        actual_index := array_index
+                        if actual_index < 0 {
+                            actual_index += len(array_reference^)
+                        }
+
+                        if actual_index >= 0 {
                             old_length := len(array_reference^)
-                            is_expansion := array_index >= old_length
+                            is_expansion := actual_index >= old_length
 
                             if is_expansion {
-                                resize(array_reference, array_index + 1)
+                                resize(array_reference, actual_index + 1)
                             }
 
                             final_value := right_value
                             if operation != .Equals {
-                                current_value := array_reference^[array_index]
+                                current_value := array_reference^[actual_index]
                                 final_value = _apply_assignment(state, operation, current_value, right_value)
                             }
 
-                            array_reference^[array_index] = final_value
+                            array_reference^[actual_index] = final_value
 
                             if is_expansion {
-                                for fill_index := old_length; fill_index < array_index; fill_index += 1 {
+                                for fill_index := old_length; fill_index < actual_index; fill_index += 1 {
                                     array_reference^[fill_index] = final_value
                                 }
                             }
                         } else {
-                            warning_msg := fmt.aprintf("Cannot assign to negative array index %d.", array_index)
+                            warning_msg := fmt.aprintf("Cannot assign to negative array index %d (resolved to %d).", array_index, actual_index)
                             state.log_proc(.Warning, warning_msg, bracket_token.line)
                             delete(warning_msg)
                         }
@@ -1270,8 +1288,14 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                     }
                 } else if array_reference, is_array := value.(^Array); is_array {
                     if array_index, is_number := get_as_int(index_value); is_number {
-                        if array_index >= 0 && array_index < len(array_reference^) {
-                            value = array_reference^[array_index]
+                        // Resolve negative index
+                        actual_index := array_index
+                        if actual_index < 0 {
+                            actual_index += len(array_reference^)
+                        }
+
+                        if actual_index >= 0 && actual_index < len(array_reference^) {
+                            value = array_reference^[actual_index]
                         } else {
                             warning_msg := fmt.aprintf("Array index %d out of bounds (Length: %d). Returning null.", array_index, len(array_reference^))
                             state.log_proc(.Warning, warning_msg, bracket_token.line)
@@ -1284,8 +1308,14 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                     }
                 } else if string_reference, is_string := value.(string); is_string {
                     if string_index, is_number := get_as_int(index_value); is_number {
-                        if string_index >= 0 && string_index < len(string_reference) {
-                            value = string_reference[string_index:string_index + 1]
+                        // Resolve negative index
+                        actual_index := string_index
+                        if actual_index < 0 {
+                            actual_index += len(string_reference)
+                        }
+
+                        if actual_index >= 0 && actual_index < len(string_reference) {
+                            value = string_reference[actual_index:actual_index + 1]
                         } else {
                             warning_msg := fmt.aprintf("String index %d out of bounds (Length: %d). Returning null.", string_index, len(string_reference))
                             state.log_proc(.Warning, warning_msg, bracket_token.line)
