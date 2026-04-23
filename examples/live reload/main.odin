@@ -13,7 +13,8 @@ Script :: struct {
     is_initialised: bool,
 }
 
-background := rl.RED
+background := rl.BLACK
+example_string := "Hello SIMP"
 
 fn_set_colour :: proc(state: ^simp.State, arguments: []simp.Value) {
     if len(arguments) == 3 {
@@ -43,11 +44,12 @@ main :: proc() {
         delta := f64(rl.GetFrameTime() * 1000)
 
         poll_script(&script)
+        simp.step_state(&script.state, delta, 1000)
 
         rl.BeginDrawing()
         rl.ClearBackground(background)
 
-        simp.step_state(&script.state, delta, 1000)
+        rl.DrawText(fmt.ctprint(example_string), 32, 32, 40, rl.WHITE)
 
         rl.EndDrawing()
 
@@ -81,6 +83,7 @@ reload_script :: proc(script: ^Script) {
     script.is_initialised = true
 
     simp.register_native_proc(&script.state, "set_colour", fn_set_colour)
+    simp.bind_variable(&script.state, "message", &example_string)
 
     file_data, read_err := os.read_entire_file(script.path, context.temp_allocator)
     if read_err == nil {
