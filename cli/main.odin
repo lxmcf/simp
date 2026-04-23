@@ -57,10 +57,10 @@ when ODIN_OS == .Windows {
 print_usage :: proc() {
     fmt.println("SIMP CLI Utility")
     fmt.println("Usage:")
-    fmt.println("  simp                    - Open interactive REPL")
-    fmt.println("  simp <filename>         - Run a script or bytecode file")
-    fmt.println("  simp compile <in> <out> - 'Compile' a script to bytecode")
-    fmt.println("  simp help               - Show this help message")
+    fmt.printfln("  %s                    - Open interactive REPL", os.args[0])
+    fmt.printfln("  %s <filename>         - Run a script or bytecode file", os.args[0])
+    fmt.printfln("  %s compile <in> <out> - 'Compile' a script to bytecode", os.args[0])
+    fmt.printfln("  %s help               - Show this help message", os.args[0])
 }
 
 cmd_quit :: proc(state: ^simp.State, arguments: []simp.Value) {
@@ -76,6 +76,38 @@ cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
     } else {
         for name, value_slot in global_scope {
             fmt.printfln(" (%s) %s = %s", value_slot.is_const ? "C" : "M", name, simp.value_to_string(value_slot.value))
+        }
+    }
+}
+
+cmd_funcs :: proc(state: ^simp.State, arguments: []simp.Value) {
+    fmt.println("\n--- Native Functions ---")
+
+    if len(state.native_procs) == 0 {
+        fmt.println("[ Empty ]")
+    } else {
+        for key, _ in state.native_procs {
+            fmt.printfln(" %s", key)
+        }
+    }
+
+    fmt.println("\n--- User Functions ---")
+
+    if len(state.functions) == 0 {
+        fmt.println("[ Empty ]")
+    } else {
+        for key, func in state.functions {
+            fmt.printf(" %s (", key)
+
+            for arg, idx in func.arguments {
+                if idx > 0 {
+                    fmt.print(", ")
+                }
+
+                fmt.print(arg)
+            }
+
+            fmt.println(")")
         }
     }
 }
@@ -118,8 +150,8 @@ main :: proc() {
     defer simp.destroy_interpreter(&state)
 
     simp.register_native_proc(&state, "quit", cmd_quit)
-    simp.register_native_proc(&state, "exit", cmd_quit)
     simp.register_native_proc(&state, "vars", cmd_vars)
+    simp.register_native_proc(&state, "funcs", cmd_funcs)
 
     lib.load_standard_library(&state)
 
@@ -244,6 +276,7 @@ get_block_depth_change :: proc(input_line: string) -> int {
         if current_char == '"' {
             in_string = !in_string
             char_index += 1
+
             continue
         }
 
@@ -261,17 +294,22 @@ get_block_depth_change :: proc(input_line: string) -> int {
             case "if":
                 if strings.contains(input_line, "then") {
                     trimmed := strings.trim_space(input_line)
+
                     if strings.has_suffix(trimmed, "then") {
                         change += 1
                     }
                 }
+
             case "end":
                 change -= 1
             }
+
             continue
         }
+
         char_index += 1
     }
+
     return change
 }
 
@@ -279,11 +317,13 @@ repl_has_var :: proc(state: ^simp.State, name: string) -> bool {
     if name == "_" {
         return false
     }
+
     for i := len(state.scopes) - 1; i >= 0; i -= 1 {
         if name in state.scopes[i] {
             return true
         }
     }
+
     return false
 }
 
@@ -374,15 +414,19 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             case "while", "for", "foreach", "in", "break", "continue", "function", "end", "then", "else", "if", "to", "step", "return", "and", "or", "not":
                 color = "\033[36m" // Cyan for Control Flow
                 expecting_declaration = false
+
             case "let", "const":
                 color = "\033[36m" // Cyan for Declarations
                 expecting_declaration = true
+
             case "import", "put", "sleep", "delete", "label", "goto":
                 color = "\033[35m" // Magenta for Directives
                 expecting_declaration = false
+
             case "true", "false", "null", "object", "array", "int", "float", "string", "bool", "len", "type":
                 color = "\033[34m" // Blue for Core Types, Constants, and Casts
                 expecting_declaration = false
+
             case:
                 if expecting_declaration {
                     if repl_has_var(state, word) {
@@ -408,6 +452,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             } else {
                 strings.write_string(&builder, word) // Default color
             }
+
             continue
         }
 
@@ -420,20 +465,24 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             paren_depth += 1
         } else if character == ')' {
             paren_depth -= 1
+
             if paren_depth < 0 {
                 strings.write_string(&builder, "\033[31m)\033[0m")
                 paren_depth = 0
                 index += 1
+
                 continue
             }
         } else if character == '[' {
             bracket_depth += 1
         } else if character == ']' {
             bracket_depth -= 1
+
             if bracket_depth < 0 {
                 strings.write_string(&builder, "\033[31m]\033[0m")
                 bracket_depth = 0
                 index += 1
+
                 continue
             }
         } else if character == '@' || character == '#' || character == '^' || character == '&' || character == '`' || character == '~' {
@@ -441,6 +490,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             strings.write_byte(&builder, character)
             strings.write_string(&builder, "\033[0m")
             index += 1
+
             continue
         }
 
@@ -498,10 +548,12 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                 for index := cursor_position - 1; index < len(input_buffer) - 1; index += 1 {
                     input_buffer[index] = input_buffer[index + 1]
                 }
+
                 pop(&input_buffer)
                 cursor_position -= 1
 
                 trimmed := strings.trim_space(string(input_buffer[:]))
+
                 if trimmed == "end" || trimmed == "else" {
                     current_prompt = unindented_prompt
                 } else {
@@ -510,6 +562,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
 
                 _render_line(state, current_prompt, input_buffer[:], cursor_position)
             }
+
             continue
         }
 

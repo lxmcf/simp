@@ -1,0 +1,5 @@
+while true then
+    set_colour (200, 255, 255)
+
+    sleep 0
+end
