@@ -52,6 +52,8 @@ Token_Keyword :: distinct enum {
     Put,
     Sleep,
     Delete,
+    Label,
+    Goto,
 
     // KEYWORDS
     And,
@@ -95,7 +97,7 @@ Token :: distinct struct {
     line:    int,
 }
 
-_tokenize_and_resolve :: proc(state: ^State, script: string, filename: string, visited_files: ^map[string]bool) -> ([]Token, bool) {
+_tokenise_and_resolve :: proc(state: ^State, script: string, filename: string, visited_files: ^map[string]bool) -> ([]Token, bool) {
     script_to_use := script
 
     if state != nil {
@@ -103,7 +105,7 @@ _tokenize_and_resolve :: proc(state: ^State, script: string, filename: string, v
         append(&state.imported_scripts, script_to_use)
     }
 
-    raw_tokens, ok := _tokenize(state, script_to_use)
+    raw_tokens, ok := _tokenise(state, script_to_use)
     if !ok {
         if state != nil {
             state.should_close = true
@@ -138,7 +140,7 @@ _tokenize_and_resolve :: proc(state: ^State, script: string, filename: string, v
                 if absolute_import_path not_in visited_files^ {
                     file_data, read_error := os.read_entire_file(absolute_import_path, context.temp_allocator)
                     if read_error == nil {
-                        sub_tokens, sub_tokens_ok := _tokenize_and_resolve(state, string(file_data), absolute_import_path, visited_files)
+                        sub_tokens, sub_tokens_ok := _tokenise_and_resolve(state, string(file_data), absolute_import_path, visited_files)
 
                         if !sub_tokens_ok {
                             return nil, false
@@ -188,7 +190,7 @@ _tokenize_and_resolve :: proc(state: ^State, script: string, filename: string, v
 }
 
 @(private = "file")
-_tokenize :: proc(state: ^State, script: string) -> ([]Token, bool) {
+_tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
     tokens := make([dynamic]Token, context.temp_allocator)
     char_index := 0
     line_number := 1
@@ -498,6 +500,12 @@ _tokenize :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
                 case "delete":
                     keyword = .Delete
+
+                case "label":
+                    keyword = .Label
+
+                case "goto":
+                    keyword = .Goto
 
                 case "and":
                     keyword = .And

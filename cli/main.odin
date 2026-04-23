@@ -377,7 +377,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             case "let", "const":
                 color = "\033[36m" // Cyan for Declarations
                 expecting_declaration = true
-            case "import", "put", "sleep", "delete":
+            case "import", "put", "sleep", "delete", "label", "goto":
                 color = "\033[35m" // Magenta for Directives
                 expecting_declaration = false
             case "true", "false", "null", "object", "array", "int", "float", "string", "bool", "len", "type":

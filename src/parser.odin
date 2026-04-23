@@ -56,13 +56,35 @@ _build_jump_table :: proc(state: ^State) {
     clear(&state.break_table)
     clear(&state.continue_table)
 
-    stack := make([dynamic]Block_Ref, context.temp_allocator)
     tokens := state.tokens[:]
+
+    label_map := make(map[string]int)
+    defer delete(label_map)
+
+    for token_index := 0; token_index < len(tokens); token_index += 1 {
+        if tokens[token_index].keyword == .Label {
+            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
+                label_name := tokens[token_index + 1].text
+                label_map[label_name] = token_index
+            }
+        }
+    }
+
+    stack := make([dynamic]Block_Ref, context.temp_allocator)
 
     for token_index := 0; token_index < len(tokens); token_index += 1 {
         token := tokens[token_index]
 
         #partial switch token.keyword {
+        case .Goto:
+            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
+                label_name := tokens[token_index + 1].text
+
+                if target_idx, exists := label_map[label_name]; exists {
+                    state.jump_table[token_index] = target_idx
+                }
+            }
+
         case .While:
             append(&stack, Block_Ref{type = .While, index = token_index})
 
@@ -100,7 +122,6 @@ _build_jump_table :: proc(state: ^State) {
                             }
                         }
                     }
-
                     break
                 }
             }
@@ -127,7 +148,6 @@ _build_jump_table :: proc(state: ^State) {
         case .Break, .Continue:
             for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
                 current_block := stack[stack_index].type
-
                 is_loop := current_block == .While || current_block == .For || current_block == .Foreach
 
                 if is_loop {
@@ -136,7 +156,6 @@ _build_jump_table :: proc(state: ^State) {
                     } else {
                         state.continue_table[token_index] = stack[stack_index].index
                     }
-
                     break
                 }
             }
@@ -251,6 +270,21 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         return "", true
 
+    case .Label:
+        if _peek_ahead(parser).type == .Ident {
+            _advance(parser)
+        }
+
+        return "", true
+
+    case .Goto:
+        if target, exists := state.jump_table[statement_index]; exists {
+            parser.position = target
+        } else {
+            return fmt.tprintf("Label '%s' not found", _peek_ahead(parser).text), false
+        }
+
+        return "", true
 
     case .Let:
         first_identifier := _advance(parser).text

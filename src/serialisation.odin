@@ -4,7 +4,7 @@ MAGIC_HEADER: string : "SIMP"
 
 serialise_script :: proc(script: string, filename: string) -> (bytecode: []u8, ok: bool) #optional_ok {
     visited_files := make(map[string]bool, 16, context.temp_allocator)
-    tokens := _tokenize_and_resolve(nil, script, filename, &visited_files) or_return
+    tokens := _tokenise_and_resolve(nil, script, filename, &visited_files) or_return
 
     jump_table, break_table, continue_table := _compute_tables(tokens, context.temp_allocator)
 

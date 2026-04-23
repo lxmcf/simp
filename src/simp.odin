@@ -200,7 +200,7 @@ load_script :: proc(state: ^State, script_data: string, filename: string) -> boo
         _deserialise_bytecode(state, persistent_binary[magic_header_length:])
     } else {
         visited_files := make(map[string]bool, 16, context.temp_allocator)
-        temporary_tokens, ok := _tokenize_and_resolve(state, script_data, filename, &visited_files)
+        temporary_tokens, ok := _tokenise_and_resolve(state, script_data, filename, &visited_files)
 
         if !ok {
             state.should_close = true
@@ -284,7 +284,7 @@ evaluate_script :: proc(state: ^State, script_data: string, filename: string = "
     }
 
     visited_files := make(map[string]bool, 16, context.temp_allocator)
-    temporary_tokens, ok := _tokenize_and_resolve(state, script_data, filename, &visited_files)
+    temporary_tokens, ok := _tokenise_and_resolve(state, script_data, filename, &visited_files)
 
     if !ok {
         state.should_close = false

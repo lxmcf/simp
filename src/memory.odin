@@ -52,6 +52,18 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
     break_table = make(map[int]int, allocator = allocator)
     continue_table = make(map[int]int, allocator = allocator)
 
+    label_map := make(map[string]int)
+    defer delete(label_map)
+
+    for token_index := 0; token_index < len(tokens); token_index += 1 {
+        if tokens[token_index].keyword == .Label {
+            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
+                label_name := tokens[token_index + 1].text
+                label_map[label_name] = token_index
+            }
+        }
+    }
+
     stack := make([dynamic]Block_Ref, allocator)
     defer delete(stack)
 
@@ -134,6 +146,14 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
                     }
 
                     break
+                }
+            }
+
+        case .Goto:
+            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
+                name := tokens[token_index + 1].text
+                if target_idx, exists := label_map[name]; exists {
+                    jump_table[token_index] = target_idx
                 }
             }
         }
