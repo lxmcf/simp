@@ -98,7 +98,7 @@ poll_script :: proc(script: ^Script) {
     current_time, err := os.last_write_time_by_name(script.path)
 
     if err == nil && current_time != script.last_modified {
-        fmt.printfln("\nFile change detected! Hot-reloading: %s", script.path)
+        fmt.printfln("\nReloading: %s", script.path)
         reload_script(script)
     }
 }

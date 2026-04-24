@@ -230,7 +230,11 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         state.is_sleeping = true
 
     case .Delete:
-        target_identifier := _advance(parser).text
+        id_token := _advance(parser)
+        if id_token.type != .Ident {
+            return "Expected identifier after 'delete'", false
+        }
+        target_identifier := id_token.text
 
         if _has_var(state, target_identifier) {
             variable_value := _get_var(state, target_identifier)
@@ -273,21 +277,32 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     case .Label:
         if _peek_ahead(parser).type == .Ident {
             _advance(parser)
+        } else {
+            return "Expected identifier after 'label'", false
         }
 
         return "", true
 
     case .Goto:
+        target_token := _peek_ahead(parser)
+        if target_token.type != .Ident {
+            return "Expected identifier after 'goto'", false
+        }
+
         if target, exists := state.jump_table[statement_index]; exists {
             parser.position = target
         } else {
-            return fmt.tprintf("Label '%s' not found", _peek_ahead(parser).text), false
+            return fmt.tprintf("Label '%s' not found", target_token.text), false
         }
 
         return "", true
 
     case .Let:
-        first_identifier := _advance(parser).text
+        id_token := _advance(parser)
+        if id_token.type != .Ident {
+            return "Expected identifier after 'let'", false
+        }
+        first_identifier := id_token.text
 
         if slot, exists := _get_slot(state, first_identifier); exists {
             if slot.decl_pc != statement_index {
@@ -348,16 +363,30 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "", true
 
     case .For:
-        identifier := _advance(parser).text
+        id_token := _advance(parser)
+        if id_token.type != .Ident {
+            return "Expected identifier after 'for'", false
+        }
+        identifier := id_token.text
+
+        if _peek_ahead(parser).type == .Comma || _peek_ahead(parser).keyword == .In {
+            return "Unexpected token in 'for' loop. Did you mean to use 'foreach'?", false
+        }
 
         if _peek_ahead(parser).type == .Equals {
             _advance(parser)
+        } else {
+            return "Expected '=' after identifier in 'for' loop", false
         }
+
         start_value := _parse_expression(state, parser)
 
         if _peek_ahead(parser).keyword == .To {
             _advance(parser)
+        } else {
+            return "Expected 'to' in 'for' loop", false
         }
+
         end_value := _parse_expression(state, parser)
 
         step_value: Value = int(1)
@@ -412,16 +441,30 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "", true
 
     case .Foreach:
-        key_identifier := _advance(parser).text
+        key_token := _advance(parser)
+        if key_token.type != .Ident {
+            return "Expected key identifier after 'foreach'", false
+        }
+        key_identifier := key_token.text
 
         if _peek_ahead(parser).type == .Comma {
             _advance(parser)
+        } else {
+            return "Expected ',' after key identifier in 'foreach' loop", false
         }
-        value_identifier := _advance(parser).text
+
+        value_token := _advance(parser)
+        if value_token.type != .Ident {
+            return "Expected value identifier in 'foreach' loop", false
+        }
+        value_identifier := value_token.text
 
         if _peek_ahead(parser).keyword == .In {
             _advance(parser)
+        } else {
+            return "Expected 'in' after value identifier in 'foreach' loop", false
         }
+
         object_value := _parse_expression(state, parser)
 
         if _peek_ahead(parser).keyword == .Then {
@@ -534,10 +577,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             case .While, .For, .Foreach:
                 parser.position = target
 
-            // NOTE: May be redundant having these here, needs more testing
-            //case .If, .Else:
-            // Do nothing
-
             case .Function:
                 state.is_returning = true
                 state.return_value = DEFAULT_VALUE
@@ -564,13 +603,20 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "", true
 
     case .Function:
-        name := _advance(parser).text
+        name_token := _advance(parser)
+        if name_token.type != .Ident {
+            return "Expected identifier for function name", false
+        }
+        name := name_token.text
 
         if (name in state.functions || name in state.native_procs) {
             return fmt.tprintf("function '%s' is already defined!", name), false
         }
 
-        _advance(parser) // (
+        lparen_token := _advance(parser)
+        if lparen_token.type != .LParen {
+            return fmt.tprintf("Expected '(' after function name '%s'", name), false
+        }
 
         arguments := make([dynamic]string, context.temp_allocator)
 
@@ -591,7 +637,11 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                 _advance(parser)
             }
         }
-        _advance(parser) // )
+
+        rparen_token := _advance(parser)
+        if rparen_token.type != .RParen {
+            return fmt.tprintf("Expected ')' after arguments in function '%s'", name), false
+        }
 
         cloned_parameters := make([]string, len(arguments))
         for argument, index in arguments {
@@ -842,6 +892,37 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
 
     case .Ident:
         #partial switch token.keyword {
+        case .New:
+            type_token := _advance(parser)
+
+            #partial switch type_token.keyword {
+            case .Array:
+                value = create_array(state)
+
+            case .Object:
+                value = create_object(state)
+
+            case .Int:
+                value = int(0)
+
+            case .Float:
+                value = f64(0.0)
+
+            case .String:
+                value = intern_string(state, "")
+
+            case .Bool:
+                value = false
+
+            case:
+                error_message := fmt.aprintf("Invalid or unknown type '%s' after 'new'", type_token.text)
+                state.log_proc(.Error, error_message, type_token.line)
+                delete(error_message)
+                state.should_close = true
+
+                return DEFAULT_VALUE
+            }
+
         case .True:
             value = true
 

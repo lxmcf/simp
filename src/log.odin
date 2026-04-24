@@ -38,6 +38,6 @@ default_log_proc :: proc(level: Log_Level, message: string, line: int = -1) {
         fmt.eprintfln("[ERROR] -> %s %s", location, message)
 
     case .Fatal:
-        fmt.eprintfln("[ERROR] -> %s %s", location, message)
+        fmt.eprintfln("[FATAL] -> %s %s", location, message)
     }
 }

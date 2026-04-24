@@ -95,9 +95,12 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
 
         case .Label:
             return "label"
-            
+
         case .Goto:
             return "goto"
+
+        case .New:
+            return "new"
 
         case .And:
             return "and"

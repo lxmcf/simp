@@ -196,10 +196,12 @@ main :: proc() {
 }
 
 run_repl :: proc(state: ^simp.State) {
+    fmt.print("\033[32m\033[1m")
     fmt.println("=======================================")
     fmt.println("                SIMP REPL              ")
     fmt.println(" Type 'quit' to exit, 'vars' for state ")
     fmt.println("=======================================")
+    fmt.print("\033[0m")
 
     command_history := make([dynamic]string)
     defer {
@@ -412,19 +414,19 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             color := ""
             switch word {
             case "while", "for", "foreach", "in", "break", "continue", "function", "end", "then", "else", "if", "to", "step", "return", "and", "or", "not":
-                color = "\033[36m" // Cyan for Control Flow
+                color = "\033[36m\033[1m" // Cyan for Control Flow
                 expecting_declaration = false
 
             case "let", "const":
-                color = "\033[36m" // Cyan for Declarations
+                color = "\033[36m\033[1m" // Cyan for Declarations
                 expecting_declaration = true
 
-            case "import", "put", "sleep", "delete", "label", "goto":
-                color = "\033[35m" // Magenta for Directives
+            case "import", "put", "sleep", "delete", "label", "goto", "new":
+                color = "\033[35m\033[1m" // Magenta for Directives
                 expecting_declaration = false
 
             case "true", "false", "null", "object", "array", "int", "float", "string", "bool", "len", "type":
-                color = "\033[34m" // Blue for Core Types, Constants, and Casts
+                color = "\033[34m\033[1m" // Blue for Core Types, Constants, and Casts
                 expecting_declaration = false
 
             case:
