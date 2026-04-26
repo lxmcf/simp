@@ -735,6 +735,10 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             next_token_type == .LBracket
 
         if is_assignment_operation {
+            if token.text != "_" && !_has_var(state, token.text) {
+                return fmt.tprintf("Undeclared variable '%s'!", token.text), false
+            }
+
             _parse_assignment(state, parser, token.text)
 
             return "", true
