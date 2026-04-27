@@ -22,6 +22,10 @@ build:
 	mkdir -p build
 	$(CC) build cli/ -out:build/simp $(C_FLAGS) -o:$(OPT)
 
+lib:
+	mkdir -p build
+	$(CC) build src/ -build-mode:static -out:build/libsimp.a $(C_FLAGS) -o:$(OPT)
+
 run: build
 	build/simp
 

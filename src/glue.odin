@@ -3,15 +3,18 @@ package simp
 import "core:fmt"
 import "core:strings"
 
+Simp_C_Proc :: #type proc "c" (state: ^State)
+
 Native_Proc_Return :: #type proc(state: ^State, arguments: []Value) -> Value
 Native_Proc_No_Return :: #type proc(state: ^State, arguments: []Value)
 
 Native_Proc :: union {
     Native_Proc_No_Return,
     Native_Proc_Return,
+    Simp_C_Proc,
 }
 
-register_native_proc :: proc(state: ^State, name: string, function: Native_Proc) {
+bind_native_proc :: proc(state: ^State, name: string, function: Native_Proc) {
     state.native_procs[name] = function
 }
 
@@ -38,25 +41,12 @@ pop_int :: proc(arguments: ^[]Value) -> (int, bool) {
         return 0, false
     }
 
-    if value, success := get_as_int(arguments^[0]); success {
+    if value, success := value_as_int(arguments^[0]); success {
         arguments^ = arguments^[1:]
         return value, true
     }
 
     return 0, false
-}
-
-pop_float :: proc(arguments: ^[]Value) -> (f64, bool) {
-    if len(arguments^) == 0 {
-        return 0.0, false
-    }
-
-    if value, success := get_as_f64(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return value, true
-    }
-
-    return 0.0, false
 }
 
 pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
@@ -64,7 +54,7 @@ pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
         return 0, false
     }
 
-    if value, success := get_as_int(arguments^[0]); success {
+    if value, success := value_as_int(arguments^[0]); success {
         arguments^ = arguments^[1:]
         return i32(value), true
     }
@@ -72,12 +62,25 @@ pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
     return 0, false
 }
 
+pop_f64 :: proc(arguments: ^[]Value) -> (f64, bool) {
+    if len(arguments^) == 0 {
+        return 0.0, false
+    }
+
+    if value, success := value_as_f64(arguments^[0]); success {
+        arguments^ = arguments^[1:]
+        return value, true
+    }
+
+    return 0.0, false
+}
+
 pop_f32 :: proc(arguments: ^[]Value) -> (f32, bool) {
     if len(arguments^) == 0 {
         return 0.0, false
     }
 
-    if value, success := get_as_f64(arguments^[0]); success {
+    if value, success := value_as_f64(arguments^[0]); success {
         arguments^ = arguments^[1:]
         return f32(value), true
     }
@@ -156,8 +159,8 @@ pop_rawptr :: proc(arguments: ^[]Value) -> (rawptr, bool) {
 }
 
 values_are_equal :: proc(left: Value, right: Value) -> bool {
-    left_number, is_left_valid := get_as_f64(left)
-    right_number, is_right_valid := get_as_f64(right)
+    left_number, is_left_valid := value_as_f64(left)
+    right_number, is_right_valid := value_as_f64(right)
 
     if is_left_valid && is_right_valid {
         return left_number == right_number
@@ -321,7 +324,7 @@ value_to_string :: proc(value: Value) -> string {
     return ""
 }
 
-get_as_f64 :: proc(value: Value) -> (f64, bool) {
+value_as_f64 :: proc(value: Value) -> (f64, bool) {
     #partial switch actual_value in value {
     case f64:
         return actual_value, true
@@ -333,7 +336,7 @@ get_as_f64 :: proc(value: Value) -> (f64, bool) {
     return 0, false
 }
 
-get_as_int :: proc(value: Value) -> (int, bool) {
+value_as_int :: proc(value: Value) -> (int, bool) {
     #partial switch actual_value in value {
     case f64:
         return int(actual_value), true

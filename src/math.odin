@@ -2,7 +2,7 @@ package simp
 
 import "core:math"
 
-_do_math :: proc(state: ^State, operation: Token_Type, left: Value, right: Value) -> (Value, bool) {
+_evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right: Value) -> (Value, bool) {
     is_compound := operation == .PlusEquals || operation == .MinusEquals || operation == .StarEquals || operation == .SlashEquals || operation == .PercentEquals
 
     left_array_reference, is_left_array := left.(^Array)
@@ -25,7 +25,7 @@ _do_math :: proc(state: ^State, operation: Token_Type, left: Value, right: Value
             result_array := is_compound ? left_array_reference : create_array(state)
 
             for index := 0; index < len(left_array_reference^); index += 1 {
-                element_result, success := _do_math(state, operation, left_array_reference^[index], right_array_reference^[index])
+                element_result, success := _evaluate_math(state, operation, left_array_reference^[index], right_array_reference^[index])
                 final_value: Value = success ? element_result : DEFAULT_VALUE
 
                 if is_compound {
@@ -45,7 +45,7 @@ _do_math :: proc(state: ^State, operation: Token_Type, left: Value, right: Value
         result_array := is_compound ? left_array_reference : create_array(state)
 
         for index := 0; index < len(left_array_reference^); index += 1 {
-            element_result, success := _do_math(state, operation, left_array_reference^[index], right)
+            element_result, success := _evaluate_math(state, operation, left_array_reference^[index], right)
             final_value: Value = success ? element_result : DEFAULT_VALUE
 
             if is_compound {
@@ -62,7 +62,7 @@ _do_math :: proc(state: ^State, operation: Token_Type, left: Value, right: Value
         new_array := create_array(state)
 
         for index := 0; index < len(right_array_reference^); index += 1 {
-            element_result, success := _do_math(state, operation, left, right_array_reference^[index])
+            element_result, success := _evaluate_math(state, operation, left, right_array_reference^[index])
 
             if success {
                 append(new_array, element_result)

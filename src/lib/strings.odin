@@ -4,12 +4,12 @@ import simp "../"
 import "core:strings"
 
 load_strings_library :: proc(state: ^simp.State) {
-    simp.register_native_proc(state, "sub", fn_sub)
-    simp.register_native_proc(state, "replace", fn_replace)
-    simp.register_native_proc(state, "upper", fn_upper)
-    simp.register_native_proc(state, "lower", fn_lower)
-    simp.register_native_proc(state, "trim", fn_trim)
-    simp.register_native_proc(state, "contains", fn_contains)
+    simp.bind_native_proc(state, "sub", fn_sub)
+    simp.bind_native_proc(state, "replace", fn_replace)
+    simp.bind_native_proc(state, "upper", fn_upper)
+    simp.bind_native_proc(state, "lower", fn_lower)
+    simp.bind_native_proc(state, "trim", fn_trim)
+    simp.bind_native_proc(state, "contains", fn_contains)
 }
 
 // sub(text, start, length) -> "llo"

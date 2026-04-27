@@ -3,9 +3,9 @@ package lib
 import simp "../"
 
 load_struct_library :: proc(state: ^simp.State) {
-    simp.register_native_proc(state, "has_key", fn_has_key)
-    simp.register_native_proc(state, "push", fn_push)
-    simp.register_native_proc(state, "pop", fn_pop)
+    simp.bind_native_proc(state, "has_key", fn_has_key)
+    simp.bind_native_proc(state, "push", fn_push)
+    simp.bind_native_proc(state, "pop", fn_pop)
 }
 
 // has_key(object_reference, "key")

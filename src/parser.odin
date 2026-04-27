@@ -195,6 +195,13 @@ _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) ->
         case Native_Proc_No_Return:
             raw_proc(state, arguments_slice)
             result = DEFAULT_VALUE
+
+        case Simp_C_Proc:
+            state.ffi_args = arguments_slice
+            state.ffi_return = DEFAULT_VALUE
+            raw_proc(state)
+            result = state.ffi_return
+            state.ffi_args = nil
         }
 
         success = true
@@ -224,7 +231,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
     case .Sleep:
         evaluated_value := _parse_expression(state, parser)
-        if sleep_time_ms, time_is_valid := get_as_f64(evaluated_value); time_is_valid {
+        if sleep_time_ms, time_is_valid := value_as_f64(evaluated_value); time_is_valid {
             state.sleep_timer = sleep_time_ms
         }
         state.is_sleeping = true
@@ -271,6 +278,20 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             return fmt.tprintf("Cannot delete: Variable '%s' does not exist", target_identifier), false
         }
+
+        return "", true
+
+    case .Exit:
+        evaluated_value := _parse_expression(state, parser)
+        if exit_code, is_valid := value_as_int(evaluated_value); is_valid {
+            state.exit_value = exit_code
+        } else {
+            state.exit_value = 0
+            state.log_proc(.Warning, "Exit code must be an integer, defaulting to 0", token.line)
+        }
+
+        state.should_close = true
+        state.is_exiting = true
 
         return "", true
 
@@ -407,16 +428,16 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             _set_var(state, initialization_key, true)
         } else {
             current_value := _get_var(state, identifier)
-            next_value, _ := _do_math(state, .Plus, current_value, step_value)
+            next_value, _ := _evaluate_math(state, .Plus, current_value, step_value)
             _set_var(state, identifier, next_value)
         }
 
         current_value := _get_var(state, identifier)
         continue_loop := false
 
-        current_float_value, is_current_float := get_as_f64(current_value)
-        end_float_value, is_end_float := get_as_f64(end_value)
-        step_float_value, is_step_float := get_as_f64(step_value)
+        current_float_value, is_current_float := value_as_f64(current_value)
+        end_float_value, is_end_float := value_as_f64(end_value)
+        step_float_value, is_step_float := value_as_f64(step_value)
 
         if is_current_float && is_end_float && is_step_float {
             if step_float_value >= 0 {
@@ -504,7 +525,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             index_value := _get_var(state, index_key)
 
-            if index, is_index_valid := get_as_int(index_value); is_index_valid {
+            if index, is_index_valid := value_as_int(index_value); is_index_valid {
                 _set_var(state, index_key, int(index + 1))
             }
         }
@@ -513,7 +534,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         keys_object_value := _get_var(state, keys_key)
         continue_loop := false
 
-        if index, is_index_valid := get_as_int(index_value); is_index_valid {
+        if index, is_index_valid := value_as_int(index_value); is_index_valid {
             if keys_object, is_keys_object_valid := keys_object_value.(^Object); is_keys_object_valid {
                 if index < len(keys_object^) {
                     continue_loop = true
@@ -530,7 +551,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             }
                         }
                     } else if array_reference, is_array := object_value.(^Array); is_array {
-                        if key_number, is_key_number := get_as_int(key_value); is_key_number {
+                        if key_number, is_key_number := value_as_int(key_value); is_key_number {
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
@@ -540,7 +561,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             }
                         }
                     } else if string_reference, is_string := object_value.(string); is_string {
-                        if key_number, is_key_number := get_as_int(key_value); is_key_number {
+                        if key_number, is_key_number := value_as_int(key_value); is_key_number {
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
@@ -765,7 +786,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 }
 
 _apply_assignment :: proc(state: ^State, operation: Token_Type, current_value: Value, right_value: Value) -> Value {
-    if math_result, math_success := _do_math(state, operation, current_value, right_value); math_success {
+    if math_result, math_success := _evaluate_math(state, operation, current_value, right_value); math_success {
         return math_result
     } else if operation == .PlusEquals {
         new_string := fmt.tprintf("%v%v", value_to_string(current_value), value_to_string(right_value))
@@ -818,8 +839,8 @@ _parse_comparison :: proc(state: ^State, parser: ^Parser) -> Value {
             return !values_are_equal(left, right)
         }
 
-        left_number, is_left_valid := get_as_f64(left)
-        right_number, is_right_valid := get_as_f64(right)
+        left_number, is_left_valid := value_as_f64(left)
+        right_number, is_right_valid := value_as_f64(right)
 
         if is_left_valid && is_right_valid {
             #partial switch (operation) {
@@ -848,7 +869,7 @@ _parse_sum :: proc(state: ^State, parser: ^Parser) -> Value {
         operation := _advance(parser).type
         right := _parse_multiply(state, parser)
 
-        if math_result, math_success := _do_math(state, operation, left, right); math_success {
+        if math_result, math_success := _evaluate_math(state, operation, left, right); math_success {
             left = math_result
         } else if operation == .Plus {
             new_string := fmt.tprintf("%v%v", value_to_string(left), value_to_string(right))
@@ -866,7 +887,7 @@ _parse_multiply :: proc(state: ^State, parser: ^Parser) -> Value {
         operation := _advance(parser).type
         right := _parse_factor(state, parser)
 
-        if math_result, math_success := _do_math(state, operation, left, right); math_success {
+        if math_result, math_success := _evaluate_math(state, operation, left, right); math_success {
             left = math_result
         }
     }
@@ -1115,7 +1136,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                     value = DEFAULT_VALUE
                 }
             } else if array_reference, is_array := value.(^Array); is_array {
-                if array_index, is_number := get_as_int(index_value); is_number {
+                if array_index, is_number := value_as_int(index_value); is_number {
                     // Resolve negative index
                     actual_index := array_index
                     if actual_index < 0 {
@@ -1135,7 +1156,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                     value = DEFAULT_VALUE
                 }
             } else if string_reference, is_string := value.(string); is_string {
-                if string_index, is_number := get_as_int(index_value); is_number {
+                if string_index, is_number := value_as_int(index_value); is_number {
                     // Resolve negative index
                     actual_index := string_index
                     if actual_index < 0 {
@@ -1216,7 +1237,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
 
             case "int":
-                if numeric_value, is_number := get_as_int(value); is_number {
+                if numeric_value, is_number := value_as_int(value); is_number {
                     value = numeric_value
                 } else if string_value, is_string := value.(string); is_string {
                     if parsed_int, is_valid_int := strconv.parse_int(string_value, 10); is_valid_int {
@@ -1237,7 +1258,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
 
             case "float":
-                if numeric_value, is_number := get_as_f64(value); is_number {
+                if numeric_value, is_number := value_as_f64(value); is_number {
                     value = numeric_value
                 } else if string_value, is_string := value.(string); is_string {
                     if parsed_float, is_valid_float := strconv.parse_f64(string_value); is_valid_float {
@@ -1364,7 +1385,7 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
 
                     _set_object_value(state, object_reference, key, right_value)
                 } else if array_reference, is_array := value.(^Array); is_array {
-                    if array_index, is_number := get_as_int(index_value); is_number {
+                    if array_index, is_number := value_as_int(index_value); is_number {
                         // Resolve negative index
                         actual_index := array_index
                         if actual_index < 0 {
@@ -1414,7 +1435,7 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                         value = DEFAULT_VALUE
                     }
                 } else if array_reference, is_array := value.(^Array); is_array {
-                    if array_index, is_number := get_as_int(index_value); is_number {
+                    if array_index, is_number := value_as_int(index_value); is_number {
                         // Resolve negative index
                         actual_index := array_index
                         if actual_index < 0 {
@@ -1434,7 +1455,7 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                         value = DEFAULT_VALUE
                     }
                 } else if string_reference, is_string := value.(string); is_string {
-                    if string_index, is_number := get_as_int(index_value); is_number {
+                    if string_index, is_number := value_as_int(index_value); is_number {
                         // Resolve negative index
                         actual_index := string_index
                         if actual_index < 0 {

@@ -93,6 +93,9 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
         case .Delete:
             return "delete"
 
+        case .Exit:
+            return "exit"
+
         case .Label:
             return "label"
 
@@ -364,25 +367,25 @@ _set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = fal
 
             #partial switch target in existing_slot.value {
             case ^f64:
-                if value_float, is_float := get_as_f64(value); is_float {
+                if value_float, is_float := value_as_f64(value); is_float {
                     target^ = value_float
                     return
                 }
 
             case ^f32:
-                if value_float, is_float := get_as_f64(value); is_float {
+                if value_float, is_float := value_as_f64(value); is_float {
                     target^ = f32(value_float)
                     return
                 }
 
             case ^int:
-                if value_integer, is_integer := get_as_int(value); is_integer {
+                if value_integer, is_integer := value_as_int(value); is_integer {
                     target^ = value_integer
                     return
                 }
 
             case ^i32:
-                if value_integer, is_integer := get_as_int(value); is_integer {
+                if value_integer, is_integer := value_as_int(value); is_integer {
                     target^ = i32(value_integer)
                     return
                 }
