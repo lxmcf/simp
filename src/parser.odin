@@ -195,13 +195,6 @@ _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) ->
         case Native_Proc_No_Return:
             raw_proc(state, arguments_slice)
             result = DEFAULT_VALUE
-
-        case Simp_C_Proc:
-            state.ffi_args = arguments_slice
-            state.ffi_return = DEFAULT_VALUE
-            raw_proc(state)
-            result = state.ffi_return
-            state.ffi_args = nil
         }
 
         success = true

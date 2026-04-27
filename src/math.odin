@@ -1,3 +1,5 @@
+#+private
+
 package simp
 
 import "core:math"

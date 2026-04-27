@@ -191,7 +191,6 @@ _tokenise_and_resolve :: proc(state: ^State, script: string, filename: string, v
     return resolved_tokens[:], true
 }
 
-@(private = "file")
 _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
     tokens := make([dynamic]Token, context.temp_allocator)
     char_index := 0

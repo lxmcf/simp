@@ -2,6 +2,7 @@ package simp
 
 import "core:strings"
 
+@(private = "package")
 intern_string :: proc(state: ^State, text: string) -> string {
     if cached_string, exists := state.string_cache[text]; exists {
         return cached_string

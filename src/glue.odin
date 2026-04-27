@@ -3,15 +3,12 @@ package simp
 import "core:fmt"
 import "core:strings"
 
-Simp_C_Proc :: #type proc "c" (state: ^State)
-
 Native_Proc_Return :: #type proc(state: ^State, arguments: []Value) -> Value
 Native_Proc_No_Return :: #type proc(state: ^State, arguments: []Value)
 
 Native_Proc :: union {
     Native_Proc_No_Return,
     Native_Proc_Return,
-    Simp_C_Proc,
 }
 
 bind_native_proc :: proc(state: ^State, name: string, function: Native_Proc) {
