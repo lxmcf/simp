@@ -8,13 +8,45 @@ import "core:path/filepath"
 import "core:strings"
 import db "debug"
 
+// TODO: Make more helpers
+ANSI_RESET :: "\033[0m"
+ANSI_RED :: "\033[31m"
+ANSI_GREEN :: "\033[32m"
+ANSI_YELLOW :: "\033[33m"
+ANSI_GRAY_ITALIC :: "\033[3;90m"
+
+ANSI_CYAN_BOLD :: "\033[36m\033[1m"
+ANSI_MAGENTA_BOLD :: "\033[35m\033[1m"
+ANSI_BLUE_BOLD :: "\033[34m\033[1m"
+ANSI_GREEN_BOLD :: "\033[32m\033[1m"
+
+ANSI_CLEAR_LINE :: "\r\033[2K"
+ANSI_DISABLE_MOUSE :: "\033[?1000l\033[?1006l"
+
+Mode :: enum {
+    Run_REPL,
+    Run_Script,
+    Compile_Script,
+    Print_Script,
+}
+
+Config :: struct {
+    mode:       Mode,
+    input_file: string,
+    out_file:   string,
+    pretty:     bool,
+}
+
 print_usage :: proc() {
     command := filepath.base(os.args[0])
+
     fmt.println("SIMP CLI Utility")
     fmt.printfln("Usage: %s [options] [script_file]", command)
     fmt.println("\nOptions:")
     fmt.println("  -h, --help           Show this help message")
     fmt.println("  -c, --compile        Compile the script to bytecode instead of running it")
+    fmt.println("  -p, --print          Print the input script to the console instead of running it")
+    fmt.println("      --pretty         Syntax highlight the printed script (used with -p)")
     fmt.println("  -o, --out <file>     Specify output file for compilation (default: <script>.sbin)")
 }
 
@@ -51,14 +83,147 @@ cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
     } else {
         for key, func in state.functions {
             fmt.printf(" %s (", key)
+
             for arg, idx in func.arguments {
                 if idx > 0 {
                     fmt.print(", ")
                 }
+
                 fmt.print(arg)
             }
+
             fmt.println(")")
         }
+    }
+}
+
+parse_arguments :: proc() -> (config: Config, should_exit: bool) {
+    config.mode = .Run_REPL
+
+    for i := 1; i < len(os.args); i += 1 {
+        arg := os.args[i]
+        switch arg {
+        case "-h", "--help":
+            print_usage()
+            return config, true
+
+        case "-c", "--compile":
+            config.mode = .Compile_Script
+
+        case "-p", "--print":
+            config.mode = .Print_Script
+
+        case "--pretty":
+            config.pretty = true
+
+        case "-o", "--out":
+            if i + 1 < len(os.args) {
+                config.out_file = os.args[i + 1]
+                i += 1
+            } else {
+                fmt.println("Error: '-o' or '--out' requires a file path.")
+                os.exit(1)
+            }
+
+        case:
+            if strings.has_prefix(arg, "-") {
+                fmt.printfln("Error: Unknown flag '%s'", arg)
+                print_usage()
+                os.exit(1)
+            } else if config.input_file == "" {
+                config.input_file = arg
+            } else {
+                fmt.printfln("Error: Unexpected argument '%s'", arg)
+                print_usage()
+                os.exit(1)
+            }
+        }
+    }
+
+    if config.input_file != "" && config.mode == .Run_REPL {
+        config.mode = .Run_Script
+    }
+
+    if config.input_file == "" && (config.mode == .Compile_Script || config.mode == .Print_Script) {
+        fmt.println("Error: This mode requires an input script.")
+        print_usage()
+        os.exit(1)
+    }
+
+    if config.pretty && config.mode != .Print_Script {
+        fmt.println("Warning: '--pretty' flag is ignored unless used with '-p' or '--print'.")
+    }
+
+    return config, false
+}
+
+main :: proc() {
+    when ODIN_DEBUG {
+        context.allocator = db.init_allocator()
+        defer db.unload_allocator()
+    }
+
+    config, should_exit := parse_arguments()
+    if should_exit {
+        return
+    }
+
+    state: simp.State
+    simp.init_interpreter(&state)
+    defer simp.destroy_interpreter(&state)
+
+    simp.register_native_proc(&state, "quit", cmd_quit)
+    simp.register_native_proc(&state, "vars", cmd_vars)
+    simp.register_native_proc(&state, "help", cmd_help)
+
+    lib.load_standard_library(&state)
+
+    switch config.mode {
+    case .Run_REPL:
+        run_repl(&state)
+
+    case .Run_Script:
+        if !os.is_file(config.input_file) {
+            fmt.printfln("Error: Could not find script '%s'", config.input_file)
+            os.exit(1)
+        }
+
+        simp.execute_script_from_file(&state, config.input_file)
+
+    case .Compile_Script:
+        out := config.out_file
+        if out == "" {
+            out = fmt.tprintf("%s.sbin", filepath.short_stem(config.input_file))
+        }
+
+        run_compile_logic(config.input_file, out)
+
+    case .Print_Script:
+        print_script(&state, config.input_file, config.pretty)
+    }
+}
+
+print_script :: proc(state: ^simp.State, input_file: string, pretty: bool) {
+    if !os.is_file(input_file) {
+        fmt.printfln("Error: Could not find script '%s'", input_file)
+        os.exit(1)
+    }
+
+    file_data, read_error := os.read_entire_file(input_file, context.temp_allocator)
+    if read_error != nil {
+        fmt.printfln("Error: Could not read input file '%s'", input_file)
+        os.exit(1)
+    }
+
+    if pretty {
+        colored_output := highlight_simp_code(state, string(file_data))
+        fmt.print(colored_output)
+    } else {
+        fmt.print(string(file_data))
+    }
+
+    if len(file_data) > 0 && file_data[len(file_data) - 1] != '\n' {
+        fmt.println()
     }
 }
 
@@ -74,98 +239,19 @@ run_compile_logic :: proc(input_path: string, output_path: string) {
 
     if compilation_success {
         write_error := os.write_entire_file(output_path, bytecode)
+
         if write_error != nil {
             fmt.printfln("Error: Could not write to %s", output_path)
         } else {
             fmt.println("Serialisation successful.")
         }
+
         delete(bytecode)
     }
 }
 
-main :: proc() {
-    when ODIN_DEBUG {
-        context.allocator = db.init_allocator()
-        defer db.unload_allocator()
-    }
-
-    state: simp.State
-    simp.init_interpreter(&state)
-    defer simp.destroy_interpreter(&state)
-
-    simp.register_native_proc(&state, "quit", cmd_quit)
-    simp.register_native_proc(&state, "vars", cmd_vars)
-    simp.register_native_proc(&state, "help", cmd_help)
-
-    lib.load_standard_library(&state)
-
-    compile_mode := false
-    out_file := ""
-    input_file := ""
-
-    for i := 1; i < len(os.args); i += 1 {
-        arg := os.args[i]
-        switch arg {
-        case "-h", "--help":
-            print_usage()
-            return
-
-        case "-c", "--compile":
-            compile_mode = true
-
-        case "-o", "--out":
-            if i + 1 < len(os.args) {
-                out_file = os.args[i + 1]
-                i += 1
-            } else {
-                fmt.println("Error: '-o' or '--out' requires a file path.")
-                os.exit(1)
-            }
-
-        case:
-            if strings.has_prefix(arg, "-") {
-                fmt.printfln("Error: Unknown flag '%s'", arg)
-                print_usage()
-                os.exit(1)
-            } else if input_file == "" {
-                input_file = arg
-            } else {
-                fmt.printfln("Error: Unexpected argument '%s'", arg)
-                print_usage()
-                os.exit(1)
-            }
-        }
-    }
-
-    if input_file == "" {
-        if compile_mode {
-            fmt.println("Error: '--compile' requires an input script.")
-            print_usage()
-            os.exit(1)
-        }
-
-        run_repl(&state)
-        return
-    }
-
-    if compile_mode {
-        if out_file == "" {
-            out_file = fmt.tprintf("%s.sbin", filepath.short_stem(input_file))
-        }
-
-        run_compile_logic(input_file, out_file)
-    } else {
-        if !os.is_file(input_file) {
-            fmt.printfln("Error: Could not find script '%s'", input_file)
-            os.exit(1)
-        }
-
-        simp.execute_script_from_file(&state, input_file)
-    }
-}
-
 run_repl :: proc(state: ^simp.State) {
-    fmt.print("\033[32m\033[1m")
+    fmt.print(ANSI_GREEN_BOLD)
     fmt.println("=======================================")
     fmt.println("                SIMP REPL              ")
     fmt.println("")
@@ -173,7 +259,7 @@ run_repl :: proc(state: ^simp.State) {
     fmt.println("vars (): Print all defined variables   ")
     fmt.println("quit (): Exit the REPL")
     fmt.println("=======================================")
-    fmt.print("\033[0m")
+    fmt.print(ANSI_RESET)
 
     fmt.println()
 
@@ -241,15 +327,19 @@ get_block_depth_change :: proc(input_line: string) -> int {
     for char_index < len(input_line) {
         current_char := input_line[char_index]
 
+        if !in_string && current_char == '/' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '/' {
+            break
+        }
+
         if current_char == '"' {
             in_string = !in_string
             char_index += 1
             continue
         }
 
-        if !in_string && is_alpha(current_char) {
+        if !in_string && is_character(current_char) {
             start_index := char_index
-            for char_index < len(input_line) && is_alphanum(input_line[char_index]) {
+            for char_index < len(input_line) && is_alphanumeric(input_line[char_index]) {
                 char_index += 1
             }
 
@@ -290,12 +380,12 @@ repl_has_var :: proc(state: ^simp.State, name: string) -> bool {
     return false
 }
 
-is_alpha :: proc(c: u8) -> bool {
+is_character :: proc(c: u8) -> bool {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
-is_alphanum :: proc(c: u8) -> bool {
-    return is_alpha(c) || (c >= '0' && c <= '9')
+is_alphanumeric :: proc(c: u8) -> bool {
+    return is_character(c) || (c >= '0' && c <= '9')
 }
 
 highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
@@ -308,7 +398,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
         character := input[index]
 
         if character == '"' {
-            strings.write_string(&builder, "\033[32m")
+            strings.write_string(&builder, ANSI_GREEN)
             strings.write_byte(&builder, character)
             index += 1
 
@@ -324,21 +414,24 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 index += 1
             }
 
-            strings.write_string(&builder, "\033[0m")
-
+            strings.write_string(&builder, ANSI_RESET)
             continue
         }
 
         if character == '/' && index + 1 < len(input) && input[index + 1] == '/' {
-            strings.write_string(&builder, "\033[90m")
+            strings.write_string(&builder, ANSI_GRAY_ITALIC)
 
             for index < len(input) {
-                strings.write_byte(&builder, input[index])
+                current_char := input[index]
+                strings.write_byte(&builder, current_char)
                 index += 1
+
+                if current_char == '\n' {
+                    break
+                }
             }
 
-            strings.write_string(&builder, "\033[0m")
-
+            strings.write_string(&builder, ANSI_RESET)
             continue
         }
 
@@ -354,18 +447,18 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 index += 1
             }
 
-            color := dot_count > 1 ? "\033[31m" : "\033[33m"
+            color := dot_count > 1 ? ANSI_RED : ANSI_YELLOW
             strings.write_string(&builder, color)
             strings.write_string(&builder, input[start_num:index])
-            strings.write_string(&builder, "\033[0m")
+            strings.write_string(&builder, ANSI_RESET)
 
             continue
         }
 
-        if is_alpha(character) {
+        if is_character(character) {
             start := index
 
-            for index < len(input) && is_alphanum(input[index]) {
+            for index < len(input) && is_alphanumeric(input[index]) {
                 index += 1
             }
 
@@ -374,27 +467,26 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
 
             switch word {
             case "while", "for", "foreach", "in", "break", "continue", "function", "end", "then", "else", "if", "to", "step", "return", "and", "or", "not":
-                color = "\033[36m\033[1m"
+                color = ANSI_CYAN_BOLD
                 expecting_declaration = false
 
             case "let", "const":
-                color = "\033[36m\033[1m"
+                color = ANSI_CYAN_BOLD
                 expecting_declaration = true
 
             case "import", "put", "sleep", "delete", "label", "goto", "new":
-                color = "\033[35m\033[1m"
+                color = ANSI_MAGENTA_BOLD
                 expecting_declaration = false
 
             case "true", "false", "null", "object", "array", "int", "float", "string", "bool", "len", "type":
-                color = "\033[34m\033[1m"
+                color = ANSI_BLUE_BOLD
                 expecting_declaration = false
 
             case:
                 if expecting_declaration {
                     if repl_has_var(state, word) {
-                        color = "\033[31m"
+                        color = ANSI_RED
                     }
-
                     expecting_declaration = false
                 } else {
                     lookahead := index
@@ -404,7 +496,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                     }
 
                     if lookahead < len(input) && input[lookahead] == '(' {
-                        color = "\033[33m"
+                        color = ANSI_YELLOW
                     }
                 }
             }
@@ -412,10 +504,11 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             if color != "" {
                 strings.write_string(&builder, color)
                 strings.write_string(&builder, word)
-                strings.write_string(&builder, "\033[0m")
+                strings.write_string(&builder, ANSI_RESET)
             } else {
                 strings.write_string(&builder, word)
             }
+
             continue
         }
 
@@ -429,9 +522,10 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             paren_depth -= 1
 
             if paren_depth < 0 {
-                strings.write_string(&builder, "\033[31m)\033[0m")
+                strings.write_string(&builder, ANSI_RED)
+                strings.write_byte(&builder, ')')
+                strings.write_string(&builder, ANSI_RESET)
                 paren_depth, index = 0, index + 1
-
                 continue
             }
         } else if character == '[' {
@@ -440,17 +534,17 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             bracket_depth -= 1
 
             if bracket_depth < 0 {
-                strings.write_string(&builder, "\033[31m]\033[0m")
+                strings.write_string(&builder, ANSI_RED)
+                strings.write_byte(&builder, ']')
+                strings.write_string(&builder, ANSI_RESET)
                 bracket_depth, index = 0, index + 1
-
                 continue
             }
         } else if character == '@' || character == '#' || character == '^' || character == '&' || character == '`' || character == '~' {
-            strings.write_string(&builder, "\033[31m")
+            strings.write_string(&builder, ANSI_RED)
             strings.write_byte(&builder, character)
-            strings.write_string(&builder, "\033[0m")
+            strings.write_string(&builder, ANSI_RESET)
             index += 1
-
             continue
         }
 
@@ -465,8 +559,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
     enable_raw_mode()
     defer disable_raw_mode()
 
-    // Explicitly tell the terminal to turn OFF mouse tracking just in case it was stuck
-    fmt.print("\033[?1000l\033[?1006l")
+    fmt.print(ANSI_DISABLE_MOUSE)
     os.flush(os.stdout)
 
     input_buffer := make([dynamic]u8, context.temp_allocator)
@@ -511,7 +604,6 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                 current_prompt = (trimmed == "end" || trimmed == "else") ? unindented_prompt : normal_prompt
                 _render_line(state, current_prompt, input_buffer[:], cursor_position)
             }
-
             continue
         }
 
@@ -591,9 +683,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                     }
                 }
             }
-
             continue
-
         }
 
         if character >= 32 && character <= 126 {
