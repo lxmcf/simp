@@ -55,14 +55,7 @@ print_usage :: proc() {
 }
 
 cmd_quit :: proc(state: ^simp.State, arguments: []simp.Value) {
-    if len(arguments) > 0 {
-        if val, ok := simp.value_as_int(arguments[0]); ok {
-            simp.shutdown_state(state, val)
-            return
-        }
-    }
-
-    simp.shutdown_state(state, simp.EXIT_SUCCESS)
+    os.exit(0)
 }
 
 cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
@@ -175,63 +168,52 @@ parse_arguments :: proc() -> (config: Config, should_exit: bool) {
 }
 
 main :: proc() {
-    exit_code := 0
-
-    {
-        when ODIN_DEBUG {
-            context.allocator = db.init_allocator()
-            defer db.unload_allocator()
-        }
-
-        config, should_exit := parse_arguments()
-        if should_exit {
-            return
-        }
-
-        state: simp.State
-        simp.init_state(&state)
-        defer {
-            exit_code = simp.get_state_exit_code(&state)
-            simp.destroy_state(&state)
-        }
-
-        if !config.minimal_repl {
-            simp.bind_native_proc(&state, "quit", cmd_quit)
-            simp.bind_native_proc(&state, "vars", cmd_vars)
-            simp.bind_native_proc(&state, "help", cmd_help)
-        }
-
-        if !config.no_std {
-            lib.load_standard_library(&state)
-        }
-
-        switch config.mode {
-        case .Run_REPL:
-            run_repl(&state, config)
-
-        case .Run_Script:
-            if !os.is_file(config.input_file) {
-                fmt.printfln("Error: Could not find script '%s'", config.input_file)
-                os.exit(1)
-            }
-
-            simp.execute_file(&state, config.input_file)
-
-        case .Compile_Script:
-            out := config.out_file
-            if out == "" {
-                out = fmt.tprintf("%s.sbin", filepath.short_stem(config.input_file))
-            }
-
-            run_compile_logic(config.input_file, out)
-
-        case .Print_Script:
-            print_script(&state, config.input_file, config.pretty)
-        }
+    when ODIN_DEBUG {
+        context.allocator = db.init_allocator()
+        defer db.unload_allocator()
     }
 
-    if exit_code != 0 {
-        os.exit(exit_code)
+    config, should_exit := parse_arguments()
+    if should_exit {
+        return
+    }
+
+    state: simp.State
+    simp.init_state(&state)
+    defer simp.destroy_state(&state)
+
+    if !config.minimal_repl {
+        simp.bind_native_proc(&state, "quit", cmd_quit)
+        simp.bind_native_proc(&state, "vars", cmd_vars)
+        simp.bind_native_proc(&state, "help", cmd_help)
+    }
+
+    if !config.no_std {
+        lib.load_standard_library(&state)
+    }
+
+    switch config.mode {
+    case .Run_REPL:
+        run_repl(&state)
+
+    case .Run_Script:
+        if !os.is_file(config.input_file) {
+            fmt.printfln("Error: Could not find script '%s'", config.input_file)
+            os.exit(1)
+        }
+
+        simp.execute_script_from_file(&state, config.input_file)
+
+    case .Compile_Script:
+        out := config.out_file
+        if out == "" {
+            out = fmt.tprintf("%s.sbin", filepath.short_stem(config.input_file))
+        }
+
+        run_compile_logic(config.input_file, out)
+
+    case .Print_Script:
+        print_script(&state, config.input_file, config.pretty)
     }
 }
 
@@ -282,22 +264,15 @@ run_compile_logic :: proc(input_path: string, output_path: string) {
     }
 }
 
-run_repl :: proc(state: ^simp.State, config: Config) {
+run_repl :: proc(state: ^simp.State) {
     fmt.print(ANSI_GREEN_BOLD)
     fmt.println("=======================================")
-    fmt.println("               SIMP REPL               ")
-    fmt.println("                                       ")
-
-    if !config.minimal_repl {
-        fmt.println("help (): Print all available functions ")
-        fmt.println("vars (): Print all defined variables   ")
-        fmt.println("quit (): Exit the REPL")
-    } else {
-        fmt.println("         Use CTRL + C to quit.         ")
-    }
-
+    fmt.println("                SIMP REPL              ")
+    fmt.println("")
+    fmt.println("help (): Print all available functions ")
+    fmt.println("vars (): Print all defined variables   ")
+    fmt.println("quit (): Exit the REPL")
     fmt.println("=======================================")
-
     fmt.print(ANSI_RESET)
 
     fmt.println()
@@ -346,12 +321,7 @@ run_repl :: proc(state: ^simp.State, config: Config) {
 
         if block_depth == 0 {
             simp.execute_snippet(state, strings.to_string(script_accumulator), os.args[0])
-
             if state.should_close {
-                if state.is_exiting {
-                    break
-                }
-                
                 state.should_close = false
             }
 
@@ -626,9 +596,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
         if character == 3 {
             disable_raw_mode()
             fmt.println()
-            simp.shutdown_state(state, simp.EXIT_SUCCESS)
-
-            return ""
+            os.exit(0)
         }
 
         if character == 4 && len(input_buffer) == 0 {

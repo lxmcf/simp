@@ -55,7 +55,6 @@ Token_Keyword :: distinct enum {
     Label,
     Goto,
     New,
-    Exit,
 
     // KEYWORDS
     And,
@@ -191,6 +190,7 @@ _tokenise_and_resolve :: proc(state: ^State, script: string, filename: string, v
     return resolved_tokens[:], true
 }
 
+@(private = "file")
 _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
     tokens := make([dynamic]Token, context.temp_allocator)
     char_index := 0
@@ -501,9 +501,6 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
                 case "delete":
                     keyword = .Delete
-
-                case "exit":
-                    keyword = .Exit
 
                 case "label":
                     keyword = .Label

@@ -16,18 +16,11 @@ ifneq ($(MOLD_EXISTS),)
     C_FLAGS += -linker:mold
 endif
 
-.PHONY: build lib run clean
+.PHONY: build run clean
 
 build:
 	mkdir -p build
 	$(CC) build cli/ -out:build/simp $(C_FLAGS) -o:$(OPT)
-
-lib:
-	mkdir -p build
-	$(CC) build src/ -build-mode:static -out:build/libsimp.a $(C_FLAGS) -o:$(OPT)
-
-	@printf "\033[33m\nBuilding a static library is not recommended unless planning to use in other languages.\n"
-	@printf "Consider using Git submodules or adding the source code to your Odin 'shared' collection.\033[0m\n\n"
 
 run: build
 	build/simp

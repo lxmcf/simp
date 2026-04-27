@@ -29,7 +29,7 @@ Script :: struct {
 
 init_script :: proc(script: ^Script, script_path: string) -> bool {
     script.name = os.short_stem(script_path)
-    simp.init_interpreter(&script.state)
+    simp.init_state(&script.state)
 
     if !simp.load_script_from_file(&script.state, script_path) {
         return false
@@ -37,7 +37,7 @@ init_script :: proc(script: ^Script, script_path: string) -> bool {
 
     lib.load_math_library(&script.state)
 
-    simp.register_native_proc(&script.state, "set_color", fn_set_color)
+    simp.bind_native_proc(&script.state, "set_color", fn_set_color)
 
     simp.bind_variable(&script.state, "player_x", &player_x)
     simp.bind_variable(&script.state, "player_y", &player_y)
@@ -60,11 +60,11 @@ main :: proc() {
 
     defer {
         if script_movement.is_loaded {
-            simp.destroy_interpreter(&script_movement.state)
+            simp.destroy_state(&script_movement.state)
         }
 
         if script_movement.is_loaded {
-            simp.destroy_interpreter(&script_rainbow.state)
+            simp.destroy_state(&script_rainbow.state)
         }
 
         rl.CloseWindow()

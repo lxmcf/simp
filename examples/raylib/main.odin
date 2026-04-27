@@ -51,11 +51,11 @@ fn_is_key_down :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
 
 main :: proc() {
     state: simp.State
-    simp.init_interpreter(&state)
-    defer simp.destroy_interpreter(&state)
+    simp.init_state(&state)
+    defer simp.destroy_state(&state)
 
-    simp.register_native_proc(&state, "draw_circle", fn_draw_circle)
-    simp.register_native_proc(&state, "is_key_down", fn_is_key_down)
+    simp.bind_native_proc(&state, "draw_circle", fn_draw_circle)
+    simp.bind_native_proc(&state, "is_key_down", fn_is_key_down)
 
     simp.bind_variable(&state, "PLAYER_SPEED", PLAYER_SPEED, true)
 

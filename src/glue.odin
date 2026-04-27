@@ -46,19 +46,6 @@ pop_int :: proc(arguments: ^[]Value) -> (int, bool) {
     return 0, false
 }
 
-pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
-    if len(arguments^) == 0 {
-        return 0, false
-    }
-
-    if value, success := value_as_int(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return i32(value), true
-    }
-
-    return 0, false
-}
-
 pop_f64 :: proc(arguments: ^[]Value) -> (f64, bool) {
     if len(arguments^) == 0 {
         return 0.0, false
@@ -70,6 +57,19 @@ pop_f64 :: proc(arguments: ^[]Value) -> (f64, bool) {
     }
 
     return 0.0, false
+}
+
+pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
+    if len(arguments^) == 0 {
+        return 0, false
+    }
+
+    if value, success := value_as_int(arguments^[0]); success {
+        arguments^ = arguments^[1:]
+        return i32(value), true
+    }
+
+    return 0, false
 }
 
 pop_f32 :: proc(arguments: ^[]Value) -> (f32, bool) {

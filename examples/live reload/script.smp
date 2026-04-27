@@ -1,9 +1,9 @@
 // Uncomment while running to see changes
 
-// message = "This is an example string"
+message = "This is an example string"
 
 while true then
-    // set_colour (0, 0, 0)
+    set_colour (100, 149, 237)
 
     sleep 0
 end

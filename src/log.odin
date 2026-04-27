@@ -12,7 +12,6 @@ Log_Level :: distinct enum u8 {
     Fatal,
 }
 
-@(private)
 default_log_proc :: proc(level: Log_Level, message: string, line: int = -1) {
     location: string
     defer if len(location) > 0 {

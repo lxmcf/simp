@@ -274,20 +274,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         return "", true
 
-    case .Exit:
-        evaluated_value := _parse_expression(state, parser)
-        if exit_code, is_valid := value_as_int(evaluated_value); is_valid {
-            state.exit_value = exit_code
-        } else {
-            state.exit_value = 0
-            state.log_proc(.Warning, "Exit code must be an integer, defaulting to 0", token.line)
-        }
-
-        state.should_close = true
-        state.is_exiting = true
-
-        return "", true
-
     case .Label:
         if _peek_ahead(parser).type == .Ident {
             _advance(parser)

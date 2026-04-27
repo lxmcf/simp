@@ -57,7 +57,7 @@ main :: proc() {
     }
 
     if script.is_initialised {
-        simp.destroy_interpreter(&script.state)
+        simp.destroy_state(&script.state)
     }
 
     rl.CloseWindow()
@@ -69,7 +69,7 @@ init_script :: proc(script: ^Script, script_path: string) {
 
 reload_script :: proc(script: ^Script) {
     if script.is_initialised {
-        simp.destroy_interpreter(&script.state)
+        simp.destroy_state(&script.state)
 
         script.state = simp.State{}
     }
@@ -79,10 +79,10 @@ reload_script :: proc(script: ^Script) {
         script.last_modified = new_time
     }
 
-    simp.init_interpreter(&script.state)
+    simp.init_state(&script.state)
     script.is_initialised = true
 
-    simp.register_native_proc(&script.state, "set_colour", fn_set_colour)
+    simp.bind_native_proc(&script.state, "set_colour", fn_set_colour)
     simp.bind_variable(&script.state, "message", &example_string)
 
     file_data, read_err := os.read_entire_file(script.path, context.temp_allocator)

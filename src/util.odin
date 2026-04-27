@@ -93,9 +93,6 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
         case .Delete:
             return "delete"
 
-        case .Exit:
-            return "exit"
-
         case .Label:
             return "label"
 
