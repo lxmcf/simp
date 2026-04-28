@@ -29,9 +29,9 @@ Script :: struct {
 
 init_script :: proc(script: ^Script, script_path: string) -> bool {
     script.name = os.short_stem(script_path)
-    simp.init_state(&script.state)
+    simp.state_init(&script.state)
 
-    if !simp.load_script_from_file(&script.state, script_path) {
+    if !simp.state_load_file(&script.state, script_path) {
         return false
     }
 
@@ -60,11 +60,11 @@ main :: proc() {
 
     defer {
         if script_movement.is_loaded {
-            simp.destroy_state(&script_movement.state)
+            simp.state_destroy(&script_movement.state)
         }
 
         if script_movement.is_loaded {
-            simp.destroy_state(&script_rainbow.state)
+            simp.state_destroy(&script_rainbow.state)
         }
 
         rl.CloseWindow()
@@ -74,8 +74,8 @@ main :: proc() {
     for !rl.WindowShouldClose() {
         delta_time_ms := f64(rl.GetFrameTime()) * 1000.0
 
-        simp.step_state(&script_movement.state, delta_time_ms)
-        simp.step_state(&script_rainbow.state, delta_time_ms)
+        simp.state_step(&script_movement.state, delta_time_ms)
+        simp.state_step(&script_rainbow.state, delta_time_ms)
 
         rl.BeginDrawing()
         rl.ClearBackground(rl.RAYWHITE)

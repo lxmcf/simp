@@ -44,7 +44,7 @@ main :: proc() {
         delta := f64(rl.GetFrameTime() * 1000)
 
         poll_script(&script)
-        simp.step_state(&script.state, delta, 1000)
+        simp.state_step(&script.state, delta, 1000)
 
         rl.BeginDrawing()
         rl.ClearBackground(background)
@@ -57,7 +57,7 @@ main :: proc() {
     }
 
     if script.is_initialised {
-        simp.destroy_state(&script.state)
+        simp.state_destroy(&script.state)
     }
 
     rl.CloseWindow()
@@ -69,7 +69,7 @@ init_script :: proc(script: ^Script, script_path: string) {
 
 reload_script :: proc(script: ^Script) {
     if script.is_initialised {
-        simp.destroy_state(&script.state)
+        simp.state_destroy(&script.state)
 
         script.state = simp.State{}
     }
@@ -79,7 +79,7 @@ reload_script :: proc(script: ^Script) {
         script.last_modified = new_time
     }
 
-    simp.init_state(&script.state)
+    simp.state_init(&script.state)
     script.is_initialised = true
 
     simp.bind_native_proc(&script.state, "set_colour", fn_set_colour)
@@ -87,7 +87,7 @@ reload_script :: proc(script: ^Script) {
 
     file_data, read_err := os.read_entire_file(script.path, context.temp_allocator)
     if read_err == nil {
-        simp.load_script(&script.state, string(file_data), script.path)
+        simp.state_load_source(&script.state, string(file_data), script.path)
         fmt.printfln("Successfully loaded mod: %s", script.path)
     } else {
         fmt.printfln("Failed to read mod file: %s", script.path)

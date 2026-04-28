@@ -179,8 +179,8 @@ main :: proc() {
     }
 
     state: simp.State
-    simp.init_state(&state)
-    defer simp.destroy_state(&state)
+    simp.state_init(&state)
+    defer simp.state_destroy(&state)
 
     if !config.minimal_repl {
         simp.bind_native_proc(&state, "quit", cmd_quit)
@@ -202,7 +202,7 @@ main :: proc() {
             os.exit(1)
         }
 
-        simp.execute_script_from_file(&state, config.input_file)
+        simp.state_run_file(&state, config.input_file)
 
     case .Compile_Script:
         out := config.out_file
@@ -320,7 +320,7 @@ run_repl :: proc(state: ^simp.State) {
         strings.write_string(&script_accumulator, "\n")
 
         if block_depth == 0 {
-            simp.execute_snippet(state, strings.to_string(script_accumulator), os.args[0])
+            simp.state_run_snippet(state, strings.to_string(script_accumulator), os.args[0])
             if state.should_close {
                 state.should_close = false
             }

@@ -17,13 +17,6 @@ DEFAULT_VALUE :: Null_Value{}
 Object :: map[string]Value
 Array :: [dynamic]Value
 
-// TODO: Add this
-//
-// NOTE: Mostly intended for io operations or more memory
-//       efficient string slicing
-@(private)
-Buffer :: []u8
-
 Type_Value :: enum {
     Int,
     Float,
@@ -31,14 +24,12 @@ Type_Value :: enum {
     Bool,
     Object,
     Array,
-    // Buffer,
     Pointer,
     Null,
     Function,
     Type,
 }
 
-// Effectively a 'nil'
 Null_Value :: distinct struct{}
 
 Value :: union {
@@ -49,7 +40,6 @@ Value :: union {
     bool,
     ^Object,
     ^Array,
-    // ^Buffer,
     rawptr, // Intended for better SIMP -> Odin/C interop
     ^f64,
     ^f32,
@@ -63,9 +53,8 @@ Value :: union {
 Variable_Slot :: struct {
     value:    Value,
     is_const: bool,
-    decl_pc:  int, // Decleration position
+    decl_pc:  int, // Declaration position
 }
-
 
 Function_Def :: struct {
     arguments: []string,
@@ -73,6 +62,7 @@ Function_Def :: struct {
 }
 
 State :: struct {
+    // Scopes & Memory
     scopes:           [dynamic]map[string]Variable_Slot,
     scope_pool:       [dynamic]map[string]Variable_Slot,
     functions:        map[string]Function_Def,
@@ -80,19 +70,21 @@ State :: struct {
     arena:            virtual.Arena,
     allocator:        mem.Allocator,
     string_cache:     map[string]string,
-    // -------------------------
+
+    // Tracked Resources
     argument_stack:   [dynamic]Value,
     tracked_objects:  map[^Object]bool,
     tracked_arrays:   map[^Array]bool,
-    // tracked_buffers:  map[^Buffer]bool,
 
-    // Performance Optimization
+    // Performance Optimization & AST
     jump_table:       map[int]int,
     break_table:      map[int]int,
     continue_table:   map[int]int,
     imported_scripts: [dynamic]string,
     tokens:           [dynamic]Token,
     position:         int,
+
+    // State Machine
     is_sleeping:      bool,
     sleep_timer:      f64,
     should_close:     bool,
@@ -104,16 +96,16 @@ State :: struct {
 }
 
 // -----------------------------------------------------------------------------
-// Core Functions
+// Lifecycle Management
 // -----------------------------------------------------------------------------
 
-init_state :: proc(state: ^State) {
+state_init :: proc(state: ^State) {
     if state.log_proc == nil {
         state.log_proc = default_log_proc
     }
 
-    if mem_error := virtual.arena_init_growing(&state.arena); mem_error != .None {
-        message := fmt.tprintf("Failed to initialise state with error: %v", mem_error)
+    if memory_error := virtual.arena_init_growing(&state.arena); memory_error != .None {
+        message := fmt.tprintf("Failed to initialise state with error: %v", memory_error)
         state.log_proc(.Fatal, message)
         return
     }
@@ -122,7 +114,7 @@ init_state :: proc(state: ^State) {
     append(&state.scopes, make(map[string]Variable_Slot))
 }
 
-destroy_state :: proc(state: ^State) {
+state_destroy :: proc(state: ^State) {
     for scope in state.scopes {
         delete(scope)
     }
@@ -160,7 +152,6 @@ destroy_state :: proc(state: ^State) {
     }
     delete(state.tracked_arrays)
 
-
     delete(state.string_cache)
     virtual.arena_destroy(&state.arena)
 
@@ -174,7 +165,11 @@ destroy_state :: proc(state: ^State) {
     delete(state.imported_scripts)
 }
 
-load_script :: proc(state: ^State, script_data: string, filename: string) -> bool {
+// -----------------------------------------------------------------------------
+// Source Loading
+// -----------------------------------------------------------------------------
+
+state_load_source :: proc(state: ^State, script_data: string, filename: string) -> bool {
     if state.tokens != nil {
         delete(state.tokens)
     }
@@ -200,9 +195,9 @@ load_script :: proc(state: ^State, script_data: string, filename: string) -> boo
         _deserialise_bytecode(state, persistent_binary[magic_header_length:])
     } else {
         visited_files := make(map[string]bool, 16, context.temp_allocator)
-        temporary_tokens, ok := _tokenise_and_resolve(state, script_data, filename, &visited_files)
+        temporary_tokens, tokenisation_success := _tokenise_and_resolve(state, script_data, filename, &visited_files)
 
-        if !ok {
+        if !tokenisation_success {
             state.should_close = true
             return false
         }
@@ -224,69 +219,35 @@ load_script :: proc(state: ^State, script_data: string, filename: string) -> boo
     return true
 }
 
-load_script_from_file :: proc(state: ^State, filename: string) -> bool {
-    data, err := os.read_entire_file(filename, context.allocator)
-    if err != nil {
+state_load_file :: proc(state: ^State, filename: string) -> bool {
+    file_data, read_error := os.read_entire_file(filename, context.allocator)
+    if read_error != nil {
         message := fmt.tprintf("Failed to read script file: %s", filename)
         state.log_proc(.Fatal, message)
 
         return false
     }
-
-    defer delete(data, context.allocator)
+    defer delete(file_data, context.allocator)
 
     slash_index := strings.last_index_any(filename, filepath.SEPARATOR_CHARS)
     name := filepath.stem(filename[slash_index + 1:])
 
-    return load_script(state, string(data), name)
+    return state_load_source(state, string(file_data), name)
 }
 
-execute_script :: proc(state: ^State, script: string, filename: string) {
-    if !load_script(state, script, filename) {
-        return
-    }
-
-    for step_state(state, 0.016, 10_000_000) {
-        if state.is_sleeping && state.sleep_timer > 0 {
-            sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
-            time.sleep(sleep_duration)
-
-            state.sleep_timer = 0
-            state.is_sleeping = false
-        }
-    }
-}
-
-
-execute_script_from_file :: proc(state: ^State, filename: string) {
-    if !load_script_from_file(state, filename) {
-        return
-    }
-
-    for step_state(state, 0.016, 10_000_000) {
-        if state.is_sleeping && state.sleep_timer > 0 {
-            sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
-            time.sleep(sleep_duration)
-
-            state.sleep_timer = 0
-            state.is_sleeping = false
-        }
-    }
-}
-
-evaluate_script :: proc(state: ^State, script_data: string, filename: string = "eval") -> bool {
+state_append_source :: proc(state: ^State, script_data: string, filename: string) -> bool {
     magic_header_length := len(MAGIC_HEADER)
     is_binary := len(script_data) >= magic_header_length && script_data[:magic_header_length] == MAGIC_HEADER
 
     if is_binary {
-        state.log_proc(.Error, "Cannot evaluate bytecode!", -1)
+        state.log_proc(.Error, "Cannot append bytecode!", -1)
         return false
     }
 
     visited_files := make(map[string]bool, 16, context.temp_allocator)
-    temporary_tokens, ok := _tokenise_and_resolve(state, script_data, filename, &visited_files)
+    temporary_tokens, tokenisation_success := _tokenise_and_resolve(state, script_data, filename, &visited_files)
 
-    if !ok {
+    if !tokenisation_success {
         state.should_close = false
         return false
     }
@@ -317,8 +278,8 @@ evaluate_script :: proc(state: ^State, script_data: string, filename: string = "
         state.continue_table[key + offset] = value + offset
     }
 
-    for t in temporary_tokens {
-        append(&state.tokens, t)
+    for token in temporary_tokens {
+        append(&state.tokens, token)
     }
 
     state.position = offset
@@ -329,15 +290,35 @@ evaluate_script :: proc(state: ^State, script_data: string, filename: string = "
     return true
 }
 
-execute_snippet :: proc(state: ^State, script: string, filename: string = "eval") {
+// -----------------------------------------------------------------------------
+// Execution
+// -----------------------------------------------------------------------------
+
+state_run_source :: proc(state: ^State, script: string, filename: string) {
+    if !state_load_source(state, script, filename) {
+        return
+    }
+
+    _execute_until_completion(state)
+}
+
+state_run_file :: proc(state: ^State, filename: string) {
+    if !state_load_file(state, filename) {
+        return
+    }
+
+    _execute_until_completion(state)
+}
+
+state_run_snippet :: proc(state: ^State, script: string, filename: string = "eval") {
     old_position := state.position
     old_is_sleeping := state.is_sleeping
     old_sleep_timer := state.sleep_timer
     old_should_close := state.should_close
-    old_len := len(state.tokens)
+    old_length := len(state.tokens)
 
     defer {
-        if old_position >= old_len {
+        if old_position >= old_length {
             state.position = len(state.tokens)
         } else {
             state.position = old_position
@@ -347,11 +328,16 @@ execute_snippet :: proc(state: ^State, script: string, filename: string = "eval"
         state.should_close = old_should_close
     }
 
-    if !evaluate_script(state, script, filename) {
+    if !state_append_source(state, script, filename) {
         return
     }
 
-    for step_state(state, 0.016, 10_000_000) {
+    _execute_until_completion(state)
+}
+
+@(private = "file")
+_execute_until_completion :: proc(state: ^State) {
+    for state_step(state, 0.016, 10_000_000) {
         if state.is_sleeping && state.sleep_timer > 0 {
             sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
             time.sleep(sleep_duration)
@@ -362,7 +348,11 @@ execute_snippet :: proc(state: ^State, script: string, filename: string = "eval"
     }
 }
 
-step_state :: proc(state: ^State, delta_time: f64, max_operations: int = 256) -> bool {
+// -----------------------------------------------------------------------------
+// State Stepping
+// -----------------------------------------------------------------------------
+
+state_step :: proc(state: ^State, delta_time: f64, max_operations: int = 256) -> bool {
     if state.should_close || state.position >= len(state.tokens) {
         return false
     }
@@ -381,6 +371,7 @@ step_state :: proc(state: ^State, delta_time: f64, max_operations: int = 256) ->
         tokens   = state.tokens[:],
         position = state.position,
     }
+
     operations_this_frame := 0
 
     for parser.position < len(parser.tokens) && !state.should_close {
@@ -390,6 +381,7 @@ step_state :: proc(state: ^State, delta_time: f64, max_operations: int = 256) ->
             state.is_sleeping = true
             state.sleep_timer = 0
             state.position = parser.position
+
             return true
         }
 
@@ -399,11 +391,12 @@ step_state :: proc(state: ^State, delta_time: f64, max_operations: int = 256) ->
             continue
         }
 
-        message, ok := _parse_statement(state, &parser)
-        if !ok {
+        error_message, is_success := _parse_statement(state, &parser)
+        if !is_success {
             error_token := _peek_ahead(&parser)
-            state.log_proc(.Fatal, message, error_token.line)
+            state.log_proc(.Fatal, error_message, error_token.line)
             state.should_close = true
+
             return false
         }
 

@@ -51,15 +51,15 @@ fn_is_key_down :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
 
 main :: proc() {
     state: simp.State
-    simp.init_state(&state)
-    defer simp.destroy_state(&state)
+    simp.state_init(&state)
+    defer simp.state_destroy(&state)
 
     simp.bind_native_proc(&state, "draw_circle", fn_draw_circle)
     simp.bind_native_proc(&state, "is_key_down", fn_is_key_down)
 
     simp.bind_variable(&state, "PLAYER_SPEED", PLAYER_SPEED, true)
 
-    simp.load_script_from_file(&state, "raylib.smp")
+    simp.state_load_file(&state, "raylib.smp")
 
     rl.InitWindow(800, 600, "SIMP + Raylib Integration")
     rl.SetTargetFPS(60)
@@ -70,7 +70,7 @@ main :: proc() {
         rl.ClearBackground(rl.RAYWHITE)
 
         if !state.should_close {
-            simp.step_state(&state, f64(rl.GetFrameTime()), 100_000)
+            simp.state_step(&state, f64(rl.GetFrameTime()), 100_000)
         }
 
         rl.EndDrawing()
