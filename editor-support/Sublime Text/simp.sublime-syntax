@@ -10,6 +10,7 @@ contexts:
     - include: comments
     - include: strings
     - include: invalid-strings
+    - include: invalid-numbers
     - include: numbers
     - include: type-casting
     - include: directives
@@ -24,7 +25,6 @@ contexts:
     - include: arrays
     - include: groups
     - include: invalid-brackets
-    - include: invalid-syntax
 
   # --- COMMENTS ---
   comments:
@@ -55,21 +55,24 @@ contexts:
       scope: invalid.illegal.single-quote.simp
 
   # --- NUMBERS ---
-  numbers:
-    - match: '\b\d+(\.\d+)?\b'
-      scope: constant.numeric.simp
+  invalid-numbers:
     - match: '\b\d+\.\d+\.\d+\b'
       scope: invalid.illegal.numeric.simp
 
+  numbers:
+    - match: '\b\d+(\.\d+)?\b'
+      scope: constant.numeric.simp
+
   # --- TYPE CASTING ---
   type-casting:
-    - match: '::\s*(int|float|string|bool|len|type|function)\b'
+    - match: '(::)\s*(int|float|string|bool|len|type|function)\b'
       captures:
-        1: support.type.simp
+        1: keyword.operator.type-cast.simp
+        2: support.type.simp
 
   # --- DIRECTIVES ---
   directives:
-    - match: '\b(import|put|sleep|delete|label|goto|new)\b'
+    - match: '\b(import|put|sleep|delete|label|goto|new|exit)\b'
       scope: keyword.other.directive.simp
 
   # --- KEYWORDS ---
@@ -131,7 +134,7 @@ contexts:
       captures:
         1: variable.function.simp
 
-  # --- CONTEXT GROUPS (BRACKET TRACKING) ---
+  # --- CONTEXT GROUPS (BRACKET & PAREN TRACKING) ---
   arrays:
     - match: '\['
       scope: punctuation.section.brackets.begin.simp
@@ -139,3 +142,19 @@ contexts:
         - meta_scope: meta.brackets.simp
         - match: '\]'
           scope: punctuation.section.brackets.end.simp
+          pop: true
+        - include: main # This allows highlighting strings/numbers INSIDE the array!
+
+  groups:
+    - match: '\('
+      scope: punctuation.section.parens.begin.simp
+      push:
+        - meta_scope: meta.parens.simp
+        - match: '\)'
+          scope: punctuation.section.parens.end.simp
+          pop: true
+        - include: main # Allows parsing code inside brackets correctly
+
+  invalid-brackets:
+    - match: '\]|\)'
+      scope: invalid.illegal.stray-bracket.simp

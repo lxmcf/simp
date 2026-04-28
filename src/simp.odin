@@ -90,6 +90,8 @@ State :: struct {
     should_close:     bool,
     return_value:     Value,
     is_returning:     bool,
+    is_exiting:       bool,
+    exit_value:       int,
 
     // Debug
     log_proc:         Log_Proc,
@@ -98,6 +100,10 @@ State :: struct {
 // -----------------------------------------------------------------------------
 // Lifecycle Management
 // -----------------------------------------------------------------------------
+
+state_get_exit_code :: proc(state: ^State) -> int {
+    return state.exit_value
+}
 
 state_init :: proc(state: ^State) {
     if state.log_proc == nil {

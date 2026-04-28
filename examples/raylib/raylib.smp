@@ -11,6 +11,7 @@ while true then
         reset_player ()
     end
 
+    // Cast bool to int and use as axis for movement
     let xaxis = is_key_down ("RIGHT")::int - is_key_down ("LEFT")::int
     let yaxis = is_key_down ("DOWN")::int - is_key_down ("UP")::int
 

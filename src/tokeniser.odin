@@ -55,6 +55,7 @@ Token_Keyword :: distinct enum {
     Label,
     Goto,
     New,
+    Exit,
 
     // KEYWORDS
     And,
@@ -510,6 +511,9 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
                 case "new":
                     keyword = .New
+
+                case "exit":
+                    keyword = .Exit
 
                 case "and":
                     keyword = .And

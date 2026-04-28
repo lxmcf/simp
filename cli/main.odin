@@ -168,52 +168,63 @@ parse_arguments :: proc() -> (config: Config, should_exit: bool) {
 }
 
 main :: proc() {
-    when ODIN_DEBUG {
-        context.allocator = db.init_allocator()
-        defer db.unload_allocator()
-    }
+    exit_code := 0
 
-    config, should_exit := parse_arguments()
-    if should_exit {
-        return
-    }
-
-    state: simp.State
-    simp.state_init(&state)
-    defer simp.state_destroy(&state)
-
-    if !config.minimal_repl {
-        simp.bind_native_proc(&state, "quit", cmd_quit)
-        simp.bind_native_proc(&state, "vars", cmd_vars)
-        simp.bind_native_proc(&state, "help", cmd_help)
-    }
-
-    if !config.no_std {
-        lib.load_standard_library(&state)
-    }
-
-    switch config.mode {
-    case .Run_REPL:
-        run_repl(&state)
-
-    case .Run_Script:
-        if !os.is_file(config.input_file) {
-            fmt.printfln("Error: Could not find script '%s'", config.input_file)
-            os.exit(1)
+    {
+        when ODIN_DEBUG {
+            context.allocator = db.init_allocator()
+            defer db.unload_allocator()
         }
 
-        simp.state_run_file(&state, config.input_file)
-
-    case .Compile_Script:
-        out := config.out_file
-        if out == "" {
-            out = fmt.tprintf("%s.sbin", filepath.short_stem(config.input_file))
+        config, should_exit := parse_arguments()
+        if should_exit {
+            return
         }
 
-        run_compile_logic(config.input_file, out)
+        state: simp.State
+        simp.state_init(&state)
+        defer {
+            exit_code = simp.state_get_exit_code(&state)
+            simp.state_destroy(&state)
+        }
 
-    case .Print_Script:
-        print_script(&state, config.input_file, config.pretty)
+        if !config.minimal_repl {
+            simp.bind_native_proc(&state, "quit", cmd_quit)
+            simp.bind_native_proc(&state, "vars", cmd_vars)
+            simp.bind_native_proc(&state, "help", cmd_help)
+        }
+
+        if !config.no_std {
+            lib.load_standard_library(&state)
+        }
+
+        switch config.mode {
+        case .Run_REPL:
+            run_repl(&state)
+
+        case .Run_Script:
+            if !os.is_file(config.input_file) {
+                fmt.printfln("Error: Could not find script '%s'", config.input_file)
+                os.exit(1)
+            }
+
+            simp.state_run_file(&state, config.input_file)
+
+        case .Compile_Script:
+            out := config.out_file
+            if out == "" {
+                out = fmt.tprintf("%s.sbin", filepath.short_stem(config.input_file))
+            }
+
+            run_compile_logic(config.input_file, out)
+
+        case .Print_Script:
+            print_script(&state, config.input_file, config.pretty)
+        }
+    }
+
+    if exit_code != 0 {
+        os.exit(exit_code)
     }
 }
 
@@ -321,6 +332,12 @@ run_repl :: proc(state: ^simp.State) {
 
         if block_depth == 0 {
             simp.state_run_snippet(state, strings.to_string(script_accumulator), os.args[0])
+
+            if state.is_exiting {
+                break
+            }
+
+            // Enforce REPL stays alive even during fatal error
             if state.should_close {
                 state.should_close = false
             }
@@ -488,7 +505,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 color = ANSI_CYAN_BOLD
                 expecting_declaration = true
 
-            case "import", "put", "sleep", "delete", "label", "goto", "new":
+            case "import", "put", "sleep", "delete", "label", "goto", "new", "exit":
                 color = ANSI_MAGENTA_BOLD
                 expecting_declaration = false
 

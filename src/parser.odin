@@ -17,6 +17,8 @@ Block_Type :: enum {
     Function,
     If,
     Else,
+    Array,
+    Object,
 }
 
 Block_Ref :: struct {
@@ -96,6 +98,12 @@ _build_jump_table :: proc(state: ^State) {
 
         case .Function:
             append(&stack, Block_Ref{type = .Function, index = token_index})
+
+        case .Array:
+            append(&stack, Block_Ref{type = .Array, index = token_index})
+
+        case .Object:
+            append(&stack, Block_Ref{type = .Object, index = token_index})
 
         case .If:
             is_block := false
@@ -271,6 +279,21 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             return fmt.tprintf("Cannot delete: Variable '%s' does not exist", target_identifier), false
         }
+
+        return "", true
+
+    case .Exit:
+        evaluated_value := _parse_expression(state, parser)
+        fmt.println("YoU HIT THE EXIT")
+        if exit_code, is_valid := value_as_int(evaluated_value); is_valid {
+            state.exit_value = exit_code
+        } else {
+            state.exit_value = 0
+            state.log_proc(.Warning, "Exit code must be an integer, defaulting to 0", token.line)
+        }
+
+        state.should_close = true
+        state.is_exiting = true
 
         return "", true
 
