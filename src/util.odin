@@ -312,9 +312,15 @@ _get_var :: proc(state: ^State, name: string) -> Value {
         return _resolve_pointer_value(existing_slot)
     }
 
-    for scope_index := scopes_len - 2; scope_index >= 0; scope_index -= 1 {
-        if existing_slot, exists := state.scopes[scope_index][name]; exists {
+    if scopes_len > 1 {
+        if existing_slot, exists := state.scopes[0][name]; exists {
             return _resolve_pointer_value(existing_slot)
+        }
+
+        for scope_index := scopes_len - 2; scope_index > 0; scope_index -= 1 {
+            if existing_slot, exists := state.scopes[scope_index][name]; exists {
+                return _resolve_pointer_value(existing_slot)
+            }
         }
     }
 
@@ -436,7 +442,7 @@ _set_var :: proc(state: ^State, name: string, value: Value, is_const: bool = fal
     }
 }
 
-_is_truthy :: proc(value: Value) -> bool {
+_is_truthy :: #force_inline proc(value: Value) -> bool {
     #partial switch raw_value in value {
     case f64:
         return raw_value != 0

@@ -5,6 +5,7 @@ import "core:mem"
 import "core:mem/virtual"
 import "core:os"
 import "core:path/filepath"
+import "core:strconv"
 import "core:strings"
 import "core:time"
 
@@ -78,6 +79,7 @@ State :: struct {
 
     // Performance Optimization & AST
     jump_table:       []int,
+    literals:         []Value,
     imported_scripts: [dynamic]string,
     tokens:           [dynamic]Token,
     position:         int,
@@ -140,7 +142,13 @@ state_destroy :: proc(state: ^State) {
 
     delete(state.argument_stack)
 
-    delete(state.jump_table)
+    if state.jump_table != nil {
+        delete(state.jump_table)
+    }
+
+    if state.literals != nil {
+        delete(state.literals)
+    }
 
     for tracked_object in state.tracked_objects {
         delete(tracked_object^)
@@ -208,6 +216,9 @@ state_load_source :: proc(state: ^State, script_data: string, filename: string) 
         state.jump_table = _compute_tables(state.tokens[:], context.allocator)
     }
 
+    state.literals = make([]Value, len(state.tokens))
+    _compute_literals(state, 0)
+
     state.position = 0
     state.is_sleeping = false
     state.sleep_timer = 0
@@ -250,19 +261,19 @@ state_append_source :: proc(state: ^State, script_data: string, filename: string
     }
 
     if state.tokens == nil {
-        state.tokens = make([dynamic]Token, state.allocator)
+        state.tokens = make([dynamic]Token)
     }
 
     computed_jump_table := _compute_tables(temporary_tokens, context.temp_allocator)
 
     if state.jump_table == nil {
-        state.jump_table = make([]int, len(temporary_tokens), state.allocator)
+        state.jump_table = make([]int, len(temporary_tokens))
         copy(state.jump_table, computed_jump_table)
     } else {
         old_len := len(state.jump_table)
         new_len := old_len + len(temporary_tokens)
 
-        new_jump_table := make([]int, new_len, state.allocator)
+        new_jump_table := make([]int, new_len)
         copy(new_jump_table, state.jump_table)
 
         for i := 0; i < len(computed_jump_table); i += 1 {
@@ -409,4 +420,23 @@ state_step :: proc(state: ^State, delta_time: f64, max_operations: int = 256) ->
     state.position = parser.position
 
     return false
+}
+
+@(private = "file")
+_compute_literals :: proc(state: ^State, start_index: int) {
+    for i := start_index; i < len(state.tokens); i += 1 {
+        tok := state.tokens[i]
+
+        if tok.type == .Number {
+            if strings.contains(tok.text, ".") {
+                val, _ := strconv.parse_f64(tok.text)
+                state.literals[i] = val
+            } else {
+                val, _ := strconv.parse_int(tok.text, 10)
+                state.literals[i] = val
+            }
+        } else if tok.type == .String {
+            state.literals[i] = intern_string(state, tok.text)
+        }
+    }
 }

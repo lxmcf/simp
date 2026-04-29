@@ -16,26 +16,24 @@ Parser :: struct {
     position: int,
 }
 
-_peek_ahead :: proc(parser: ^Parser, n: int = 0) -> Token {
-    tokens_length := len(parser.tokens)
+_peek_ahead :: #force_inline proc(parser: ^Parser, n: int = 0) -> Token {
+    idx := parser.position + n
 
-    if parser.position + n < tokens_length {
-        return parser.tokens[parser.position + n]
+    if idx < len(parser.tokens) {
+        return parser.tokens[idx]
     }
 
-    last_line := tokens_length > 0 ? parser.tokens[tokens_length - 1].line : 1
-
-    return Token{type = .EOF, keyword = .None, text = "EOF", line = last_line}
+    return Token{type = .EOF, keyword = .None, text = "EOF", line = -1}
 }
 
-_advance :: proc(parser: ^Parser) -> Token {
-    token := _peek_ahead(parser)
-
+_advance :: #force_inline proc(parser: ^Parser) -> Token {
     if parser.position < len(parser.tokens) {
+        token := parser.tokens[parser.position]
         parser.position += 1
-    }
 
-    return token
+        return token
+    }
+    return Token{type = .EOF, keyword = .None, text = "EOF", line = -1}
 }
 
 _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) -> (Value, bool) {
@@ -788,17 +786,8 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
     case .Ellipsis:
         value = _get_var(state, "...")
 
-    case .Number:
-        if strings.contains(token.text, ".") {
-            parsed_value, _ := strconv.parse_f64(token.text)
-            value = parsed_value
-        } else {
-            parsed_value, _ := strconv.parse_int(token.text, 10)
-            value = parsed_value
-        }
-
-    case .String:
-        value = intern_string(state, token.text)
+    case .Number, .String:
+        value = state.literals[parser.position - 1]
 
     case .Ident:
         #partial switch token.keyword {
@@ -1197,7 +1186,6 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
     return value
 }
 
-// TODO: Clean up... Massively
 _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: string) {
     next_token_type := _peek_ahead(parser).type
     is_assignment_operation := next_token_type == .Equals || next_token_type == .PlusEquals || next_token_type == .MinusEquals || next_token_type == .StarEquals || next_token_type == .SlashEquals || next_token_type == .PercentEquals
@@ -1210,11 +1198,12 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
             current_value := _get_var(state, first_identifier)
             right_value = _apply_assignment(state, operation, current_value, right_value)
         }
+
         _set_var(state, first_identifier, right_value)
         return
     }
 
-    value := _get_var(state, first_identifier)
+    parent_value := _get_var(state, first_identifier)
 
     for {
         next_token_type = _peek_ahead(parser).type
@@ -1222,165 +1211,118 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
             break
         }
 
-        if next_token_type == .Dot {
-            _advance(parser)
-            property := _advance(parser).text
+        is_dot := next_token_type == .Dot
+        bracket_token := _advance(parser) // skip . or[
 
-            next_token_type = _peek_ahead(parser).type
-            is_assignment_operation = next_token_type == .Equals || next_token_type == .PlusEquals || next_token_type == .MinusEquals || next_token_type == .StarEquals || next_token_type == .SlashEquals || next_token_type == .PercentEquals
-
-            if is_assignment_operation {
-                operation := _advance(parser).type
-                right_value := _parse_expression(state, parser)
-
-                if object_reference, is_object := value.(^Object); is_object {
-                    if operation != .Equals {
-                        current_value: Value = DEFAULT_VALUE
-                        if existing_value, exists := object_reference^[property]; exists {
-                            current_value = existing_value
-                        }
-
-                        right_value = _apply_assignment(state, operation, current_value, right_value)
-                    }
-
-                    _set_object_value(state, object_reference, property, right_value)
-                }
-
-                return
-            } else {
-                if object_reference, is_object := value.(^Object); is_object {
-                    if new_value, exists := object_reference^[property]; exists {
-                        value = new_value
-                    } else {
-                        value = DEFAULT_VALUE
-                    }
-                } else {
-                    value = DEFAULT_VALUE
-                }
-            }
-        } else if next_token_type == .LBracket {
-            bracket_token := _advance(parser)
-            index_value := _parse_expression(state, parser)
+        key: string
+        if is_dot {
+            key = _advance(parser).text
+        } else {
+            key = _to_key(_parse_expression(state, parser))
 
             if _peek_ahead(parser).type == .RBracket {
                 _advance(parser)
             }
-
-            next_token_type = _peek_ahead(parser).type
-            is_assignment_operation = next_token_type == .Equals || next_token_type == .PlusEquals || next_token_type == .MinusEquals || next_token_type == .StarEquals || next_token_type == .SlashEquals || next_token_type == .PercentEquals
-
-            if is_assignment_operation {
-                operation := _advance(parser).type
-                right_value := _parse_expression(state, parser)
-
-                if object_reference, is_object := value.(^Object); is_object {
-                    key := _to_key(index_value)
-                    if operation != .Equals {
-                        current_value: Value = DEFAULT_VALUE
-                        if existing_value, exists := object_reference^[key]; exists {
-                            current_value = existing_value
-                        }
-
-                        right_value = _apply_assignment(state, operation, current_value, right_value)
-                    }
-
-                    _set_object_value(state, object_reference, key, right_value)
-                } else if array_reference, is_array := value.(^Array); is_array {
-                    if array_index, is_number := value_as_int(index_value); is_number {
-                        // Resolve negative index
-                        actual_index := array_index
-                        if actual_index < 0 {
-                            actual_index += len(array_reference^)
-                        }
-
-                        if actual_index >= 0 {
-                            old_length := len(array_reference^)
-                            is_expansion := actual_index >= old_length
-
-                            if is_expansion {
-                                resize(array_reference, actual_index + 1)
-                            }
-
-                            final_value := right_value
-                            if operation != .Equals {
-                                current_value := array_reference^[actual_index]
-                                final_value = _apply_assignment(state, operation, current_value, right_value)
-                            }
-
-                            array_reference^[actual_index] = final_value
-
-                            if is_expansion {
-                                for fill_index := old_length; fill_index < actual_index; fill_index += 1 {
-                                    array_reference^[fill_index] = final_value
-                                }
-                            }
-                        } else {
-                            warning_msg := fmt.aprintf("Cannot assign to negative array index %d (resolved to %d).", array_index, actual_index)
-                            state.log_proc(.Warning, warning_msg, bracket_token.line)
-                            delete(warning_msg)
-                        }
-                    }
-                } else if _, is_string := value.(string); is_string {
-                    warning_msg := fmt.aprintf("Strings are read-only. Cannot assign to a string index.")
-                    state.log_proc(.Warning, warning_msg, bracket_token.line)
-                    delete(warning_msg)
-                }
-
-                return
-            } else {
-                if object_reference, is_object := value.(^Object); is_object {
-                    key := _to_key(index_value)
-                    if new_value, exists := object_reference^[key]; exists {
-                        value = new_value
-                    } else {
-                        value = DEFAULT_VALUE
-                    }
-                } else if array_reference, is_array := value.(^Array); is_array {
-                    if array_index, is_number := value_as_int(index_value); is_number {
-                        // Resolve negative index
-                        actual_index := array_index
-                        if actual_index < 0 {
-                            actual_index += len(array_reference^)
-                        }
-
-                        if actual_index >= 0 && actual_index < len(array_reference^) {
-                            value = array_reference^[actual_index]
-                        } else {
-                            warning_msg := fmt.aprintf("Array index %d out of bounds (Length: %d). Returning null.", array_index, len(array_reference^))
-                            state.log_proc(.Warning, warning_msg, bracket_token.line)
-                            delete(warning_msg)
-
-                            value = DEFAULT_VALUE
-                        }
-                    } else {
-                        value = DEFAULT_VALUE
-                    }
-                } else if string_reference, is_string := value.(string); is_string {
-                    if string_index, is_number := value_as_int(index_value); is_number {
-                        // Resolve negative index
-                        actual_index := string_index
-                        if actual_index < 0 {
-                            actual_index += len(string_reference)
-                        }
-
-                        if actual_index >= 0 && actual_index < len(string_reference) {
-                            value = string_reference[actual_index:actual_index + 1]
-                        } else {
-                            warning_msg := fmt.aprintf("String index %d out of bounds (Length: %d). Returning null.", string_index, len(string_reference))
-                            state.log_proc(.Warning, warning_msg, bracket_token.line)
-                            delete(warning_msg)
-
-                            value = DEFAULT_VALUE
-                        }
-                    } else {
-                        value = DEFAULT_VALUE
-                    }
-                } else {
-                    value = DEFAULT_VALUE
-                }
-            }
         }
 
+        peek_op := _peek_ahead(parser).type
+        is_assignment_operation = peek_op == .Equals || peek_op == .PlusEquals || peek_op == .MinusEquals || peek_op == .StarEquals || peek_op == .SlashEquals || peek_op == .PercentEquals
+
+        if is_assignment_operation {
+            operation := _advance(parser).type
+            right_value := _parse_expression(state, parser)
+
+            if object_reference, is_object := parent_value.(^Object); is_object {
+                if operation != .Equals {
+                    current_value: Value = DEFAULT_VALUE
+                    if existing_value, exists := object_reference^[key]; exists {
+                        current_value = existing_value
+                    }
+
+                    right_value = _apply_assignment(state, operation, current_value, right_value)
+                }
+
+                _set_object_value(state, object_reference, key, right_value)
+            } else if array_reference, is_array := parent_value.(^Array); !is_dot && is_array {
+                if array_index, is_valid := strconv.parse_int(key, 10); is_valid {
+                    actual_index := array_index
+                    if actual_index < 0 {
+                        actual_index += len(array_reference^)
+                    }
+
+                    if actual_index >= 0 {
+                        old_length := len(array_reference^)
+                        is_expansion := actual_index >= old_length
+
+                        if is_expansion {
+                            resize(array_reference, actual_index + 1)
+                        }
+
+                        final_value := right_value
+                        if operation != .Equals {
+                            current_value := array_reference^[actual_index]
+                            final_value = _apply_assignment(state, operation, current_value, right_value)
+                        }
+
+                        array_reference^[actual_index] = final_value
+
+                        if is_expansion {
+                            for fill_index := old_length; fill_index < actual_index; fill_index += 1 {
+                                array_reference^[fill_index] = final_value
+                            }
+                        }
+                    } else {
+                        warning_msg := fmt.aprintf("Cannot assign to negative array index %d", array_index)
+                        state.log_proc(.Warning, warning_msg, bracket_token.line)
+                        delete(warning_msg)
+                    }
+                }
+            } else if _, is_string := parent_value.(string); !is_dot && is_string {
+                state.log_proc(.Warning, "Strings are read-only. Cannot assign to a string index.", bracket_token.line)
+            }
+
+            return
+        } else {
+            if object_reference, is_object := parent_value.(^Object); is_object {
+                if new_value, exists := object_reference^[key]; exists {
+                    parent_value = new_value
+                } else {
+                    parent_value = DEFAULT_VALUE
+                }
+            } else if array_reference, is_array := parent_value.(^Array); !is_dot && is_array {
+                if array_index, is_valid := strconv.parse_int(key, 10); is_valid {
+                    actual_index := array_index
+                    if actual_index < 0 {
+                        actual_index += len(array_reference^)
+                    }
+
+                    if actual_index >= 0 && actual_index < len(array_reference^) {
+                        parent_value = array_reference^[actual_index]
+                    } else {
+                        parent_value = DEFAULT_VALUE
+                    }
+                } else {
+                    parent_value = DEFAULT_VALUE
+                }
+            } else if string_reference, is_string := parent_value.(string); !is_dot && is_string {
+                if string_index, is_valid := strconv.parse_int(key, 10); is_valid {
+                    actual_index := string_index
+                    if actual_index < 0 {
+                        actual_index += len(string_reference)
+                    }
+
+                    if actual_index >= 0 && actual_index < len(string_reference) {
+                        parent_value = string_reference[actual_index:actual_index + 1]
+                    } else {
+                        parent_value = DEFAULT_VALUE
+                    }
+                } else {
+                    parent_value = DEFAULT_VALUE
+                }
+            } else {
+                parent_value = DEFAULT_VALUE
+            }
+        }
     }
 }
 

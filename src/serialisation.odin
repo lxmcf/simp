@@ -83,12 +83,12 @@ _deserialise_bytecode :: proc(state: ^State, bytecode_data: string) {
         append(&state.tokens, new_token)
     }
 
+    // Precomputed tables
     if state.jump_table != nil {
         delete(state.jump_table)
     }
 
-    state.jump_table = make([]int, number_of_tokens, state.allocator)
-
+    state.jump_table = make([]int, number_of_tokens)
     for i in 0 ..< number_of_tokens {
         state.jump_table[i] = -1
     }

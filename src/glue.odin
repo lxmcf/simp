@@ -163,39 +163,7 @@ values_are_equal :: proc(left: Value, right: Value) -> bool {
         return left_number == right_number
     }
 
-    #partial switch left_value in left {
-    case string:
-        if right_value, ok := right.(string); ok {
-            return left_value == right_value
-        }
-
-    case bool:
-        if right_value, ok := right.(bool); ok {
-            return left_value == right_value
-        }
-
-    case ^Object:
-        if right_value, ok := right.(^Object); ok {
-            return left_value == right_value
-        }
-
-    case ^Array:
-        if right_value, ok := right.(^Array); ok {
-            return left_value == right_value
-        }
-
-    case Null_Value:
-        if _, ok := right.(Null_Value); ok {
-            return true
-        }
-
-    case Type_Value:
-        if right_value, is_type := right.(Type_Value); is_type {
-            return left_value == right_value
-        }
-    }
-
-    return false
+    return left == right
 }
 
 value_to_string :: proc(value: Value) -> string {
@@ -237,15 +205,7 @@ value_to_string :: proc(value: Value) -> string {
             is_first = false
 
             strings.write_string(&builder, fmt.tprintf("%q: ", key))
-
-            // TODO: Cleanup
-            if str_val, is_str := val.(string); is_str {
-                strings.write_string(&builder, fmt.tprintf("%q", str_val))
-            } else if str_ptr, is_str_ptr := val.(^string); is_str_ptr {
-                strings.write_string(&builder, fmt.tprintf("%q", str_ptr^))
-            } else {
-                strings.write_string(&builder, value_to_string(val))
-            }
+            _write_json_value(&builder, val)
         }
 
         strings.write_string(&builder, "}")
@@ -260,16 +220,7 @@ value_to_string :: proc(value: Value) -> string {
                 strings.write_string(&builder, ", ")
             }
 
-            val := raw_value^[index]
-
-            // TODO: Cleanup
-            if str_val, is_str := val.(string); is_str {
-                strings.write_string(&builder, fmt.tprintf("%q", str_val))
-            } else if str_ptr, is_str_ptr := val.(^string); is_str_ptr {
-                strings.write_string(&builder, fmt.tprintf("%q", str_ptr^))
-            } else {
-                strings.write_string(&builder, value_to_string(val))
-            }
+            _write_json_value(&builder, raw_value^[index])
         }
 
         strings.write_string(&builder, "]")
@@ -321,7 +272,7 @@ value_to_string :: proc(value: Value) -> string {
     return ""
 }
 
-value_as_f64 :: proc(value: Value) -> (f64, bool) {
+value_as_f64 :: #force_inline proc(value: Value) -> (f64, bool) {
     #partial switch actual_value in value {
     case f64:
         return actual_value, true
@@ -333,7 +284,7 @@ value_as_f64 :: proc(value: Value) -> (f64, bool) {
     return 0, false
 }
 
-value_as_int :: proc(value: Value) -> (int, bool) {
+value_as_int :: #force_inline proc(value: Value) -> (int, bool) {
     #partial switch actual_value in value {
     case f64:
         return int(actual_value), true
@@ -343,4 +294,15 @@ value_as_int :: proc(value: Value) -> (int, bool) {
     }
 
     return 0, false
+}
+
+@(private = "file")
+_write_json_value :: proc(builder: ^strings.Builder, val: Value) {
+    if str_val, is_str := val.(string); is_str {
+        strings.write_string(builder, fmt.tprintf("%q", str_val))
+    } else if str_ptr, is_str_ptr := val.(^string); is_str_ptr {
+        strings.write_string(builder, fmt.tprintf("%q", str_ptr^))
+    } else {
+        strings.write_string(builder, value_to_string(val))
+    }
 }
