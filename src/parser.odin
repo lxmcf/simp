@@ -84,28 +84,31 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     statement_index := parser.position
     token := _advance(parser)
 
-    if token.type != .Ident {
+    // FIX 1: The Guard must allow Braces to pass through
+    if token.type != .Ident && token.type != .LBrace && token.type != .RBrace {
         return fmt.tprintf("Unexpected token '%s'", token.text), false
+    }
+
+    // FIX 2: If we start a statement with '{', we just ignore it.
+    // The jump table handles the logic; the parser just needs to move past it.
+    if token.type == .LBrace {
+        return "", true
     }
 
     #partial switch token.keyword {
     case .Put:
         evaluated_value := _parse_expression(state, parser)
         fmt.print(value_to_string(evaluated_value))
-
         return "", true
 
     case .Pull:
         prompt_value := _parse_expression(state, parser)
         fmt.print(value_to_string(prompt_value))
-
         os.flush(os.stdout)
-
         input_buffer: [1024]u8
         if _, read_error := os.read(os.stdin, input_buffer[:]); read_error != nil {
             return fmt.tprintf("Failed to pull text: %v", read_error), false
         }
-
         return "", true
 
     case .Sleep:
@@ -113,7 +116,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if sleep_time_ms, time_is_valid := value_as_f64(evaluated_value); time_is_valid {
             state.sleep_timer = sleep_time_ms
         }
-
         state.is_sleeping = true
 
     case .Delete:
@@ -132,7 +134,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                     free(object_reference)
                     delete_key(&state.tracked_objects, object_reference)
                 }
-
                 _set_var(state, target_identifier, DEFAULT_VALUE)
             } else if array_reference, is_array := variable_value.(^Array); is_array {
                 if array_reference in state.tracked_arrays {
@@ -140,25 +141,21 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                     free(array_reference)
                     delete_key(&state.tracked_arrays, array_reference)
                 }
-
                 _set_var(state, target_identifier, DEFAULT_VALUE)
             } else {
                 return fmt.tprintf("Variable '%s' is not an object or array and cannot be deleted", target_identifier), false
             }
-        } else if target_identifier in state.functions {     // User function
+        } else if target_identifier in state.functions {
             function := &state.functions[target_identifier]
-
             for argument in function.arguments {
                 delete(argument)
             }
-
             delete_key(&state.functions, target_identifier)
-        } else if target_identifier in state.native_procs {     // Bound function
+        } else if target_identifier in state.native_procs {
             delete_key(&state.native_procs, target_identifier)
         } else {
             return fmt.tprintf("Cannot delete: Variable '%s' does not exist", target_identifier), false
         }
-
         return "", true
 
     case .Exit:
@@ -169,10 +166,8 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             state.exit_value = 0
             state.log_proc(.Warning, "Exit code must be an integer, defaulting to 0", token.line)
         }
-
         state.should_close = true
         state.is_exiting = true
-
         return "", true
 
     case .Label:
@@ -181,7 +176,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             return "Expected identifier after 'label'", false
         }
-
         return "", true
 
     case .Goto:
@@ -189,14 +183,12 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if target_token.type != .Ident {
             return "Expected identifier after 'goto'", false
         }
-
         target := state.jump_table[statement_index]
         if target != -1 {
             parser.position = target
         } else {
             return fmt.tprintf("Label '%s' not found", target_token.text), false
         }
-
         return "", true
 
     case .Let:
@@ -205,63 +197,51 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return "Expected identifier after 'let'", false
         }
         first_identifier := id_token.text
-
         if slot, exists := _get_slot(state, first_identifier); exists {
             if slot.decl_pc != statement_index {
                 return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", first_identifier), false
             }
         }
-
         if _peek_ahead(parser).type == .Equals {
-            _advance(parser) // Skip the =
+            _advance(parser)
             _set_var(state, first_identifier, _parse_expression(state, parser), false, statement_index)
-
             return "", true
         }
-
         _parse_assignment(state, parser, first_identifier)
         return "", true
 
     case .Const:
         identifier_token := _advance(parser)
-
         if identifier_token.type != .Ident {
             return "Expected identifier after 'const'", false
         }
-
         if slot, exists := _get_slot(state, identifier_token.text); exists {
             if slot.decl_pc != statement_index {
                 return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", identifier_token.text), false
             }
         }
-
         if _peek_ahead(parser).type != .Equals {
             return "'const' requires an assignment", false
         }
-
-        _advance(parser) // skip =
+        _advance(parser)
         evaluated_value := _parse_expression(state, parser)
-
         _set_var(state, identifier_token.text, evaluated_value, true, statement_index)
-
         return "", true
 
     case .While:
         condition_value := _parse_expression(state, parser)
-        if _peek_ahead(parser).keyword == .Then {
+        if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
 
         if !_is_truthy(condition_value) {
             target := state.jump_table[statement_index]
-
             if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
             }
         }
-
         return "", true
 
     case .For:
@@ -270,25 +250,15 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return "Expected identifier after 'for'", false
         }
         identifier := id_token.text
-
-        if _peek_ahead(parser).type == .Comma || _peek_ahead(parser).keyword == .In {
-            return "Unexpected token in 'for' loop. Did you mean to use 'foreach'?", false
-        }
-
         if _peek_ahead(parser).type == .Equals {
             _advance(parser)
         } else {
             return "Expected '=' after identifier in 'for' loop", false
         }
-
         start_value := _parse_expression(state, parser)
-
         if _peek_ahead(parser).keyword == .To {
             _advance(parser)
-        } else {
-            return "Expected 'to' in 'for' loop", false
         }
-
         end_value := _parse_expression(state, parser)
 
         step_value: Value = int(1)
@@ -296,14 +266,12 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             _advance(parser)
             step_value = _parse_expression(state, parser)
         }
-
-        if _peek_ahead(parser).keyword == .Then {
+        if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
 
         initialization_key := fmt.tprintf("__for_init_%d", statement_index)
         _, is_initialized := _get_var(state, initialization_key).(bool)
-
         if !is_initialized {
             _set_var(state, identifier, start_value)
             _set_var(state, initialization_key, true)
@@ -315,7 +283,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         current_value := _get_var(state, identifier)
         continue_loop := false
-
         current_float_value, is_current_float := value_as_f64(current_value)
         end_float_value, is_end_float := value_as_f64(end_value)
         step_float_value, is_step_float := value_as_f64(step_value)
@@ -330,16 +297,13 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         if !continue_loop {
             target := state.jump_table[statement_index]
-
             if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
             }
-
             _set_var(state, initialization_key, DEFAULT_VALUE)
         }
-
         return "", true
 
     case .Foreach:
@@ -348,40 +312,29 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return "Expected key identifier after 'foreach'", false
         }
         key_identifier := key_token.text
-
         if _peek_ahead(parser).type == .Comma {
             _advance(parser)
-        } else {
-            return "Expected ',' after key identifier in 'foreach' loop", false
         }
-
         value_token := _advance(parser)
         if value_token.type != .Ident {
             return "Expected value identifier in 'foreach' loop", false
         }
         value_identifier := value_token.text
-
         if _peek_ahead(parser).keyword == .In {
             _advance(parser)
-        } else {
-            return "Expected 'in' after value identifier in 'foreach' loop", false
         }
-
         object_value := _parse_expression(state, parser)
-
-        if _peek_ahead(parser).keyword == .Then {
+        if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
 
         initialization_key := fmt.tprintf("__foreach_init_%d", statement_index)
         index_key := fmt.tprintf("__foreach_idx_%d", statement_index)
         keys_key := fmt.tprintf("__foreach_keys_%d", statement_index)
-
         _, is_initialized := _get_var(state, initialization_key).(bool)
 
         if !is_initialized {
             keys_object := create_object(state)
-
             if object_reference, is_object := object_value.(^Object); is_object {
                 index := 0
                 for key, _ in object_reference^ {
@@ -399,13 +352,11 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 return "'foreach' loop requires an object, array, or string", false
             }
-
             _set_var(state, keys_key, keys_object)
             _set_var(state, initialization_key, true)
             _set_var(state, index_key, int(0))
         } else {
             index_value := _get_var(state, index_key)
-
             if index, is_index_valid := value_as_int(index_value); is_index_valid {
                 _set_var(state, index_key, int(index + 1))
             }
@@ -414,19 +365,16 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         index_value := _get_var(state, index_key)
         keys_object_value := _get_var(state, keys_key)
         continue_loop := false
-
         if index, is_index_valid := value_as_int(index_value); is_index_valid {
             if keys_object, is_keys_object_valid := keys_object_value.(^Object); is_keys_object_valid {
                 if index < len(keys_object^) {
                     continue_loop = true
                     key_value := keys_object^[fmt.tprintf("%d", index)]
-
                     if object_reference, is_object := object_value.(^Object); is_object {
                         if key_string, is_key_string := key_value.(string); is_key_string {
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, key_string)
                             }
-
                             if value_identifier != "_" {
                                 _set_var(state, value_identifier, object_reference^[key_string])
                             }
@@ -436,7 +384,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
-
                             if value_identifier != "_" {
                                 _set_var(state, value_identifier, array_reference^[key_number])
                             }
@@ -446,7 +393,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
-
                             if value_identifier != "_" {
                                 char_string := string_reference[key_number:key_number + 1]
                                 _set_var(state, value_identifier, char_string)
@@ -459,51 +405,20 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         if !continue_loop {
             target := state.jump_table[statement_index]
-
             if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
             }
-
             _set_var(state, initialization_key, DEFAULT_VALUE)
         }
-
         return "", true
 
-    case .End:
+    case .Break, .Continue:
         target := state.jump_table[statement_index]
         if target != -1 {
-            start_token := state.tokens[target]
-
-            #partial switch start_token.keyword {
-            case .While, .For, .Foreach:
-                parser.position = target
-
-            case .Function:
-                state.is_returning = true
-                state.return_value = DEFAULT_VALUE
-            }
-        } else {
-            _skip_block_backward(parser)
+            parser.position = token.keyword == .Break ? target + 1 : target
         }
-
-        return "", true
-
-    case .Break:
-        target := state.jump_table[statement_index]
-        if target != -1 {
-            parser.position = target + 1 // target is automatically resolved to the 'End' token now!
-        }
-
-        return "", true
-
-    case .Continue:
-        target := state.jump_table[statement_index]
-        if target != -1 {
-            parser.position = target
-        }
-
         return "", true
 
     case .Function:
@@ -517,39 +432,33 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return fmt.tprintf("function '%s' is already defined!", name), false
         }
 
-        lparen_token := _advance(parser)
-        if lparen_token.type != .LParen {
-            return fmt.tprintf("Expected '(' after function name '%s'", name), false
+        if _advance(parser).type != .LParen {
+            return "Expected '(' after function name", false
         }
-
         arguments := make([dynamic]string, context.temp_allocator)
-
         for _peek_ahead(parser).type == .Ident || _peek_ahead(parser).type == .Ellipsis {
             next_token := _advance(parser)
-
             if next_token.type == .Ellipsis {
                 append(&arguments, "...")
-
-                if _peek_ahead(parser).type == .Comma {
-                    return fmt.tprintf("'...' must be the last argument in function '%s'", name), false
-                }
                 break
             }
-
             append(&arguments, next_token.text)
             if _peek_ahead(parser).type == .Comma {
                 _advance(parser)
             }
         }
+        if _advance(parser).type != .RParen {
+            return "Expected ')' after arguments", false
+        }
 
-        rparen_token := _advance(parser)
-        if rparen_token.type != .RParen {
-            return fmt.tprintf("Expected ')' after arguments in function '%s'", name), false
+        // FIX 3: Consume opening brace for function definition
+        if _peek_ahead(parser).type == .LBrace {
+            _advance(parser)
         }
 
         cloned_parameters := make([]string, len(arguments))
-        for argument, index in arguments {
-            cloned_parameters[index] = strings.clone(argument)
+        for arg, i in arguments {
+            cloned_parameters[i] = strings.clone(arg)
         }
 
         state.functions[name] = Function_Def {
@@ -558,107 +467,101 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         }
 
         target := state.jump_table[statement_index]
-
         if target != -1 {
             parser.position = target + 1
         } else {
             _skip_block_forward(parser)
         }
-
         return "", true
 
     case .Return:
         state.return_value = _parse_expression(state, parser)
         state.is_returning = true
-
         return "", true
 
     case .If:
         condition := _parse_expression(state, parser)
 
-        if _peek_ahead(parser).keyword != .Then {
-            return "Expected 'then'", false
-        }
-        _advance(parser)
-
-        is_block := state.jump_table[statement_index] != -1
-
-        if is_block {
-            if _is_truthy(condition) {
-                return "", true
-            } else {
-                target := state.jump_table[statement_index]
-
-                if target != -1 {
-                    parser.position = target + 1
+        // FIX 4: Handle both block '{' and 1-line 'then'
+        if _peek_ahead(parser).type == .LBrace {
+            _advance(parser)
+            target := state.jump_table[statement_index]
+            if target != -1 {
+                if _is_truthy(condition) {
+                    return "", true
                 } else {
-                    _skip_if_false(parser)
+                    parser.position = target
+                    return "", true
                 }
-
-                return "", true
             }
-        } else {
+        } else if _peek_ahead(parser).keyword == .Then {
+            _advance(parser)
             if _is_truthy(condition) {
                 return _parse_statement(state, parser)
             } else {
-                for parser.position < len(parser.tokens) && _peek_ahead(parser).type != .Newline && _peek_ahead(parser).keyword != .Else {
+                for parser.position < len(parser.tokens) {
+                    if _peek_ahead(parser).type == .Newline {
+                        break
+                    }
                     _advance(parser)
-                }
-
-                if _peek_ahead(parser).keyword == .Else {
-                    _advance(parser)
-
-                    return _parse_statement(state, parser)
                 }
             }
+            return "", true
         }
-
-        return "", true
+        return "Expected '{' or 'then' after if condition", false
 
     case .Else:
+        if _peek_ahead(parser).type == .LBrace {
+            _advance(parser)
+        }
         target := state.jump_table[statement_index]
-
         if target != -1 {
             parser.position = target + 1
-        } else {
-            _skip_else_block(parser)
         }
-
         return "", true
 
     case .None:
-        next_token_type := _peek_ahead(parser).type
-        is_assignment_operation :=
-            next_token_type == .Equals ||
-            next_token_type == .PlusEquals ||
-            next_token_type == .MinusEquals ||
-            next_token_type == .StarEquals ||
-            next_token_type == .SlashEquals ||
-            next_token_type == .PercentEquals ||
-            next_token_type == .Dot ||
-            next_token_type == .LBracket
+        if token.type == .RBrace {
+            target := state.jump_table[statement_index]
+            if target != -1 {
+                if target < statement_index {
+                    start_tok := state.tokens[target]
+                    is_loop := start_tok.keyword == .While || start_tok.keyword == .For || start_tok.keyword == .Foreach
+                    if is_loop {
+                        parser.position = target
+                    } else if start_tok.keyword == .Function {
+                        state.is_returning = true
+                        state.return_value = DEFAULT_VALUE
+                    }
+                } else {
+                    parser.position = target
+                }
+            } else {
+                _skip_block_backward(parser)
+            }
+            return "", true
+        }
 
-        if is_assignment_operation {
+        next_tok := _peek_ahead(parser).type
+        is_assign := next_tok == .Equals || next_tok == .PlusEquals || next_tok == .MinusEquals || next_tok == .StarEquals || next_tok == .SlashEquals || next_tok == .PercentEquals || next_tok == .Dot || next_tok == .LBracket
+
+        if is_assign {
             if token.text != "_" && !_has_var(state, token.text) {
                 return fmt.tprintf("Undeclared variable '%s'!", token.text), false
             }
-
             _parse_assignment(state, parser, token.text)
-
             return "", true
         }
 
         if (token.text in state.native_procs) || (token.text in state.functions) {
             _, success := _evaluate_function_call(state, parser, token.text)
-
             if !success {
                 return fmt.tprintf("Expected '(' after '%s'", token.text), false
             }
-
             return "", true
         }
 
-        if next_token_type == .LParen {
+        if next_tok == .LParen {
             return fmt.tprintf("Attempted to call unknown function '%s'", token.text), false
         }
 
@@ -866,10 +769,13 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
             value = Type_Value.Function
 
         case .Array:
+            if _peek_ahead(parser).type == .LBrace {
+                _advance(parser)
+            }
             new_array := create_array(state)
 
             for _peek_ahead(parser).type != .EOF {
-                if _peek_ahead(parser).keyword == .End {
+                if _peek_ahead(parser).type == .RBrace {
                     _advance(parser)
                     break
                 }
@@ -883,15 +789,17 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 new_value := _parse_expression(state, parser)
                 append(new_array, new_value)
             }
-
             value = new_array
 
         case .Object:
+            if _peek_ahead(parser).type == .LBrace {
+                _advance(parser)
+            }
             new_object := create_object(state)
             array_index := 0
 
             for _peek_ahead(parser).type != .EOF {
-                if _peek_ahead(parser).keyword == .End {
+                if _peek_ahead(parser).type == .RBrace {
                     _advance(parser)
                     break
                 }
@@ -918,7 +826,6 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                     array_index += 1
                 }
             }
-
             value = new_object
 
         case .None:
@@ -1436,16 +1343,9 @@ _skip_block_forward :: proc(parser: ^Parser) {
 
     for parser.position < len(parser.tokens) {
         token := _advance(parser)
-        #partial switch token.keyword {
-        case .While, .For, .Foreach, .Function, .Object, .Array:
+        if token.type == .LBrace {
             nest += 1
-
-        case .If:
-            if _peek_ahead(parser).keyword == .Then {
-                nest += 1
-            }
-
-        case .End:
+        } else if token.type == .RBrace {
             nest -= 1
         }
 
@@ -1463,13 +1363,10 @@ _skip_block_backward :: proc(parser: ^Parser) {
         parser.position -= 1
         token := parser.tokens[parser.position]
 
-        if token.keyword == .End {
+        if token.type == .RBrace {
             nest += 1
-        } else {
-            #partial switch token.keyword {
-            case .While, .For, .Foreach, .Function, .Object, .Array, .If:
-                nest -= 1
-            }
+        } else if token.type == .LBrace {
+            nest -= 1
         }
 
         if nest == 0 {
@@ -1479,53 +1376,6 @@ _skip_block_backward :: proc(parser: ^Parser) {
 
     if nest > 0 {
         parser.position = len(parser.tokens)
-    }
-}
-
-_skip_if_false :: proc(parser: ^Parser) {
-    nest := 1
-
-    loop: for parser.position < len(parser.tokens) {
-        token := _advance(parser)
-
-        #partial switch token.keyword {
-        case .If:
-            if _peek_ahead(parser).keyword == .Then {
-                nest += 1
-            }
-
-        case .End:
-            nest -= 1
-
-            if nest == 0 {
-                break loop
-            }
-
-        case .Else:
-            if nest == 1 {
-                break loop
-            }
-        }
-    }
-}
-
-_skip_else_block :: proc(parser: ^Parser) {
-    nest := 1
-
-    for parser.position < len(parser.tokens) {
-        token := _advance(parser)
-
-        if token.keyword == .If {
-            if _peek_ahead(parser).keyword == .Then {
-                nest += 1
-            }
-        } else if token.keyword == .End {
-            nest -= 1
-
-            if nest == 0 {
-                break
-            }
-        }
     }
 }
 

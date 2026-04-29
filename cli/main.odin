@@ -352,43 +352,32 @@ run_repl :: proc(state: ^simp.State) {
 
 get_block_depth_change :: proc(input_line: string) -> int {
     change := 0
-    in_string := false
+    is_in_string := false
     char_index := 0
 
     for char_index < len(input_line) {
         current_char := input_line[char_index]
 
-        if !in_string && current_char == '/' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '/' {
+        // Ignore comments
+        if !is_in_string && current_char == '/' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '/' {
             break
         }
 
+        // Handle strings so we don't count braces inside them
         if current_char == '"' {
-            in_string = !in_string
+            if char_index == 0 || input_line[char_index - 1] != '\\' {
+                is_in_string = !is_in_string
+            }
             char_index += 1
             continue
         }
 
-        if !in_string && is_character(current_char) {
-            start_index := char_index
-            for char_index < len(input_line) && is_alphanumeric(input_line[char_index]) {
-                char_index += 1
-            }
-
-            word := input_line[start_index:char_index]
-            switch word {
-            case "function", "while", "for", "foreach":
+        if !is_in_string {
+            if current_char == '{' {
                 change += 1
-
-            case "if":
-                if strings.contains(input_line, "then") && strings.has_suffix(strings.trim_space(input_line), "then") {
-                    change += 1
-                }
-
-            case "end":
+            } else if current_char == '}' {
                 change -= 1
             }
-
-            continue
         }
 
         char_index += 1
@@ -422,7 +411,7 @@ is_alphanumeric :: proc(c: u8) -> bool {
 highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
     builder := strings.builder_make(context.temp_allocator)
     index := 0
-    paren_depth, bracket_depth := 0, 0
+    paren_depth, bracket_depth, brace_depth := 0, 0, 0
     expecting_declaration := false
 
     for index < len(input) {
@@ -441,7 +430,6 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                     index += 1
                     break
                 }
-
                 index += 1
             }
 
@@ -451,17 +439,14 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
 
         if character == '/' && index + 1 < len(input) && input[index + 1] == '/' {
             strings.write_string(&builder, ANSI_GRAY_ITALIC)
-
             for index < len(input) {
                 current_char := input[index]
                 strings.write_byte(&builder, current_char)
                 index += 1
-
                 if current_char == '\n' {
                     break
                 }
             }
-
             strings.write_string(&builder, ANSI_RESET)
             continue
         }
@@ -469,26 +454,21 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
         if character >= '0' && character <= '9' {
             start_num := index
             dot_count := 0
-
             for index < len(input) && ((input[index] >= '0' && input[index] <= '9') || input[index] == '.') {
                 if input[index] == '.' {
                     dot_count += 1
                 }
-
                 index += 1
             }
-
             color := dot_count > 1 ? ANSI_RED : ANSI_YELLOW
             strings.write_string(&builder, color)
             strings.write_string(&builder, input[start_num:index])
             strings.write_string(&builder, ANSI_RESET)
-
             continue
         }
 
         if is_character(character) {
             start := index
-
             for index < len(input) && is_alphanumeric(input[index]) {
                 index += 1
             }
@@ -497,7 +477,8 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             color := ""
 
             switch word {
-            case "while", "for", "foreach", "in", "break", "continue", "function", "end", "then", "else", "if", "to", "step", "return", "and", "or", "not":
+            // Removed 'end', kept 'then'
+            case "while", "for", "foreach", "in", "break", "continue", "function", "then", "else", "if", "to", "step", "return", "and", "or", "not":
                 color = ANSI_CYAN_BOLD
                 expecting_declaration = false
 
@@ -521,11 +502,9 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                     expecting_declaration = false
                 } else {
                     lookahead := index
-
                     for lookahead < len(input) && (input[lookahead] == ' ' || input[lookahead] == '\t') {
                         lookahead += 1
                     }
-
                     if lookahead < len(input) && input[lookahead] == '(' {
                         color = ANSI_YELLOW
                     }
@@ -539,7 +518,6 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             } else {
                 strings.write_string(&builder, word)
             }
-
             continue
         }
 
@@ -547,11 +525,15 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
             expecting_declaration = false
         }
 
-        if character == '(' {
+        switch character {
+        case '(':
             paren_depth += 1
-        } else if character == ')' {
+        case '[':
+            bracket_depth += 1
+        case '{':
+            brace_depth += 1
+        case ')':
             paren_depth -= 1
-
             if paren_depth < 0 {
                 strings.write_string(&builder, ANSI_RED)
                 strings.write_byte(&builder, ')')
@@ -559,11 +541,8 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 paren_depth, index = 0, index + 1
                 continue
             }
-        } else if character == '[' {
-            bracket_depth += 1
-        } else if character == ']' {
+        case ']':
             bracket_depth -= 1
-
             if bracket_depth < 0 {
                 strings.write_string(&builder, ANSI_RED)
                 strings.write_byte(&builder, ']')
@@ -571,7 +550,16 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 bracket_depth, index = 0, index + 1
                 continue
             }
-        } else if character == '@' || character == '#' || character == '^' || character == '&' || character == '`' || character == '~' {
+        case '}':
+            brace_depth -= 1
+            if brace_depth < 0 {
+                strings.write_string(&builder, ANSI_RED)
+                strings.write_byte(&builder, '}')
+                strings.write_string(&builder, ANSI_RESET)
+                brace_depth, index = 0, index + 1
+                continue
+            }
+        case '@', '#', '^', '&', '`', '~':
             strings.write_string(&builder, ANSI_RED)
             strings.write_byte(&builder, character)
             strings.write_string(&builder, ANSI_RESET)
@@ -603,7 +591,6 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
     byte_read_buffer: [1]u8
     for {
         bytes_count, read_error := os.read(os.stdin, byte_read_buffer[:])
-
         if read_error != nil || bytes_count == 0 {
             continue
         }
@@ -631,8 +618,9 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                 ordered_remove(&input_buffer, cursor_position - 1)
                 cursor_position -= 1
 
-                trimmed := strings.trim_space(string(input_buffer[:]))
-                current_prompt = (trimmed == "end" || trimmed == "else") ? unindented_prompt : normal_prompt
+                trimmed_input := strings.trim_space(string(input_buffer[:]))
+                // Changed "end" to "}"
+                current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
                 _render_line(state, current_prompt, input_buffer[:], cursor_position)
             }
             continue
@@ -640,21 +628,18 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
 
         if character == 27 {
             os.read(os.stdin, byte_read_buffer[:])
-
             if byte_read_buffer[0] == '[' {
                 first_char: u8 = 0
                 last_char: u8 = 0
-                is_first := true
+                is_first_sequence_char := true
 
                 for {
                     os.read(os.stdin, byte_read_buffer[:])
                     last_char = byte_read_buffer[0]
-
-                    if is_first {
+                    if is_first_sequence_char {
                         first_char = last_char
-                        is_first = false
+                        is_first_sequence_char = false
                     }
-
                     if last_char >= 0x40 && last_char <= 0x7E {
                         break
                     }
@@ -667,28 +652,25 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                         if history_index > 0 {
                             history_index -= 1
                             clear(&input_buffer)
-                            for char in history^[history_index] {
-                                append(&input_buffer, u8(char))
+                            for char_val in history^[history_index] {
+                                append(&input_buffer, u8(char_val))
                             }
                             cursor_position = len(input_buffer)
-
-                            trimmed := strings.trim_space(string(input_buffer[:]))
-                            current_prompt = (trimmed == "end" || trimmed == "else") ? unindented_prompt : normal_prompt
+                            trimmed_input := strings.trim_space(string(input_buffer[:]))
+                            current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
                             _render_line(state, current_prompt, input_buffer[:], cursor_position)
                         }
-
                     case 'B':
                         // Down
                         if history_index < len(history^) - 1 {
                             history_index += 1
                             clear(&input_buffer)
-                            for char in history^[history_index] {
-                                append(&input_buffer, u8(char))
+                            for char_val in history^[history_index] {
+                                append(&input_buffer, u8(char_val))
                             }
                             cursor_position = len(input_buffer)
-
-                            trimmed := strings.trim_space(string(input_buffer[:]))
-                            current_prompt = (trimmed == "end" || trimmed == "else") ? unindented_prompt : normal_prompt
+                            trimmed_input := strings.trim_space(string(input_buffer[:]))
+                            current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
                             _render_line(state, current_prompt, input_buffer[:], cursor_position)
                         } else if history_index == len(history^) - 1 {
                             history_index += 1
@@ -697,14 +679,12 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                             current_prompt = normal_prompt
                             _render_line(state, current_prompt, input_buffer[:], cursor_position)
                         }
-
                     case 'C':
                         // Right
                         if cursor_position < len(input_buffer) {
                             cursor_position += 1
                             _render_line(state, current_prompt, input_buffer[:], cursor_position)
                         }
-
                     case 'D':
                         // Left
                         if cursor_position > 0 {
@@ -721,21 +701,21 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
             inject_at(&input_buffer, cursor_position, character)
             cursor_position += 1
 
-            trimmed := strings.trim_space(string(input_buffer[:]))
-            current_prompt = (trimmed == "end" || trimmed == "else") ? unindented_prompt : normal_prompt
+            trimmed_input := strings.trim_space(string(input_buffer[:]))
+            // Changed "end" to "}"
+            current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
             _render_line(state, current_prompt, input_buffer[:], cursor_position)
         }
     }
 
-    result := strings.clone_from_bytes(input_buffer[:], context.temp_allocator)
-
-    if len(result) > 0 {
-        if len(history^) == 0 || history^[len(history^) - 1] != result {
-            append(history, strings.clone(result))
+    result_str := strings.clone_from_bytes(input_buffer[:], context.temp_allocator)
+    if len(result_str) > 0 {
+        if len(history^) == 0 || history^[len(history^) - 1] != result_str {
+            append(history, strings.clone(result_str))
         }
     }
 
-    return result
+    return result_str
 }
 
 _render_line :: proc(state: ^simp.State, prompt: string, buffer: []u8, cursor: int) {

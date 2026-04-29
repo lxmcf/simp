@@ -138,17 +138,14 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
         case .Function:
             return "function"
 
-        case .End:
-            return "end"
-
-        case .Then:
-            return "then"
-
         case .Else:
             return "else"
 
         case .If:
             return "if"
+
+        case .Then:
+            return "then"
 
         case .Let:
             return "let"
@@ -239,6 +236,12 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
 
     case .RParen:
         return ")"
+
+    case .LBrace:
+        return "{"
+
+    case .RBrace:
+        return "}"
 
     case .Comma:
         return ","

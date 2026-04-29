@@ -66,8 +66,8 @@ free_array :: proc(state: ^State, target_array: ^Array) {
 @(private = "package")
 _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []int {
     jump_table := make([]int, len(tokens), allocator)
-    for i := 0; i < len(tokens); i += 1 {
-        jump_table[i] = -1
+    for index := 0; index < len(tokens); index += 1 {
+        jump_table[index] = -1
     }
 
     label_map := make(map[string]int, 16, context.temp_allocator)
@@ -100,34 +100,26 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
             append(&stack, Block_Ref{type = .Function, index = token_index, breaks = nil})
 
         case .Array, .Object:
-            // <- FIX: Allows loops outside these not to be falsely ended!
-            append(&stack, Block_Ref{type = token.keyword == .Array ? .Array : .Object, index = token_index, breaks = nil})
+            block_type := Block_Type.Object
+            if token.keyword == .Array {
+                block_type = .Array
+            }
+            append(&stack, Block_Ref{type = block_type, index = token_index, breaks = nil})
 
         case .If:
             is_block := false
 
             for search_index := token_index + 1; search_index < len(tokens); search_index += 1 {
-                if tokens[search_index].keyword == .Then {
-                    if search_index + 1 < len(tokens) {
-                        next_token_type := tokens[search_index + 1].type
-
-                        if next_token_type == .Newline || next_token_type == .Colon {
-                            is_block = true
-                        } else {
-                            line_number := tokens[search_index].line
-
-                            for inner_index := search_index + 1; inner_index < len(tokens); inner_index += 1 {
-                                if tokens[inner_index].line != line_number {
-                                    break
-                                }
-
-                                if tokens[inner_index].keyword == .End || tokens[inner_index].keyword == .Else {
-                                    is_block = true
-                                    break
-                                }
-                            }
-                        }
-                    }
+                tok := tokens[search_index]
+                if tok.type == .LBrace {
+                    is_block = true
+                    break
+                }
+                if tok.keyword == .Then {
+                    is_block = false
+                    break
+                }
+                if tok.type == .Newline {
                     break
                 }
             }
@@ -136,23 +128,30 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
                 append(&stack, Block_Ref{type = .If, index = token_index, breaks = nil})
             }
 
-        case .Else:
-            if len(stack) > 0 && stack[len(stack) - 1].type == .If {
-                block_reference := pop(&stack)
-                jump_table[block_reference.index] = token_index
+        case .None:
+            if token.type == .RBrace {
+                if len(stack) > 0 {
+                    block_reference := pop(&stack)
 
-                append(&stack, Block_Ref{type = .Else, index = token_index, breaks = nil})
-            }
+                    has_else := token_index + 1 < len(tokens) && tokens[token_index + 1].keyword == .Else
 
-        case .End:
-            if len(stack) > 0 {
-                block_reference := pop(&stack)
-                jump_table[block_reference.index] = token_index
-                jump_table[token_index] = block_reference.index
+                    if block_reference.type == .If && has_else {
+                        else_index := token_index + 1
+                        jump_table[block_reference.index] = else_index
 
-                if block_reference.breaks != nil {
-                    for b in block_reference.breaks {
-                        jump_table[b] = token_index // Breaks instantly map to the End token
+                        append(&stack, Block_Ref{type = .Else, index = token_index, breaks = nil})
+                    } else if block_reference.type == .Else {
+                        jump_table[block_reference.index] = token_index
+                    } else {
+                        jump_table[block_reference.index] = token_index
+                        jump_table[token_index] = block_reference.index
+
+                        if block_reference.breaks != nil {
+                            for break_index in block_reference.breaks {
+                                jump_table[break_index] = token_index
+                            }
+                            delete(block_reference.breaks)
+                        }
                     }
                 }
             }

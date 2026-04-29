@@ -2,8 +2,8 @@
 
 message = "This is an example string"
 
-while true then
+while true {
     set_colour (100, 149, 237)
 
     sleep 0
-end
+}

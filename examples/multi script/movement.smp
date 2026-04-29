@@ -1,17 +1,12 @@
 let speed = 3.5
 let direction = 1
 
-while true then
+while true {
     player_x += (speed * direction)
 
-    if player_x > 700 then
-        direction = -1
-    end
-
-    if player_x < 100 then
-        direction = 1
-    end
+    if player_x > 700 then direction = -1
+    if player_x < 100 then direction = 1
 
     // Halt execution for 1 step/frame
     sleep 0
-end
+}

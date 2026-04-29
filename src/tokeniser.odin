@@ -25,6 +25,8 @@ Token_Type :: distinct enum {
     GreaterEqual,
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     Comma,
     Colon,
     DoubleColon,
@@ -69,12 +71,11 @@ Token_Keyword :: distinct enum {
     Break,
     Continue,
     Function,
-    End,
-    Then,
     Else,
     If,
     Let,
     Const,
+    Then,
     To,
     Step,
     Return,
@@ -275,6 +276,14 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
         case ']':
             append(&tokens, Token{type = .RBracket, keyword = .None, text = "]", line = line_number})
+            char_index += 1
+
+        case '{':
+            append(&tokens, Token{type = .LBrace, keyword = .None, text = "{", line = line_number})
+            char_index += 1
+
+        case '}':
+            append(&tokens, Token{type = .RBrace, keyword = .None, text = "}", line = line_number})
             char_index += 1
 
         case '.':
@@ -549,12 +558,6 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
                 case "function":
                     keyword = .Function
 
-                case "end":
-                    keyword = .End
-
-                case "then":
-                    keyword = .Then
-
                 case "else":
                     keyword = .Else
 
@@ -566,6 +569,9 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
                 case "const":
                     keyword = .Const
+
+                case "then":
+                    keyword = .Then
 
                 case "to":
                     keyword = .To

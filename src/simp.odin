@@ -244,14 +244,6 @@ state_load_file :: proc(state: ^State, filename: string) -> bool {
 }
 
 state_append_source :: proc(state: ^State, script_data: string, filename: string) -> bool {
-    magic_header_length := len(MAGIC_HEADER)
-    is_binary := len(script_data) >= magic_header_length && script_data[:magic_header_length] == MAGIC_HEADER
-
-    if is_binary {
-        state.log_proc(.Error, "Cannot append bytecode!", -1)
-        return false
-    }
-
     visited_files := make(map[string]bool, 16, context.temp_allocator)
     temporary_tokens, tokenisation_success := _tokenise_and_resolve(state, script_data, filename, &visited_files)
 
@@ -264,36 +256,28 @@ state_append_source :: proc(state: ^State, script_data: string, filename: string
         state.tokens = make([dynamic]Token)
     }
 
-    computed_jump_table := _compute_tables(temporary_tokens, context.temp_allocator)
+    old_total_tokens := len(state.tokens)
 
-    if state.jump_table == nil {
-        state.jump_table = make([]int, len(temporary_tokens))
-        copy(state.jump_table, computed_jump_table)
-    } else {
-        old_len := len(state.jump_table)
-        new_len := old_len + len(temporary_tokens)
-
-        new_jump_table := make([]int, new_len)
-        copy(new_jump_table, state.jump_table)
-
-        for i := 0; i < len(computed_jump_table); i += 1 {
-            val := computed_jump_table[i]
-            if val != -1 {
-                new_jump_table[old_len + i] = val + old_len
-            } else {
-                new_jump_table[old_len + i] = -1
-            }
-        }
-
-        delete(state.jump_table)
-        state.jump_table = new_jump_table
-    }
-
+    // Append the new tokens
     for token in temporary_tokens {
         append(&state.tokens, token)
     }
 
-    state.position = len(state.tokens) - len(temporary_tokens)
+    // Recompute the entire jump table for the whole state to ensure
+    // all blocks (even those spanning REPL entries) are linked.
+    if state.jump_table != nil {
+        delete(state.jump_table)
+    }
+    state.jump_table = _compute_tables(state.tokens[:], context.allocator)
+
+    // Update literals for the whole token set
+    if state.literals != nil {
+        delete(state.literals)
+    }
+    state.literals = make([]Value, len(state.tokens))
+    _compute_literals(state, 0)
+
+    state.position = old_total_tokens
     state.is_sleeping = false
     state.sleep_timer = 0
     state.should_close = false

@@ -24,6 +24,7 @@ contexts:
     - include: declarations
     - include: arrays
     - include: groups
+    - include: blocks
     - include: invalid-brackets
 
   # --- COMMENTS ---
@@ -77,7 +78,8 @@ contexts:
 
   # --- KEYWORDS ---
   keywords:
-    - match: '\b(while|for|foreach|in|break|continue|end|then|else|if|to|step|return)\b'
+    # Removed 'end', kept 'then' for your 1-line if statements
+    - match: '\b(while|for|foreach|in|break|continue|then|else|if|to|step|return)\b'
       scope: keyword.control.simp
     - match: '\b(and|or|not)\b'
       scope: keyword.operator.logical.simp
@@ -134,7 +136,7 @@ contexts:
       captures:
         1: variable.function.simp
 
-  # --- CONTEXT GROUPS (BRACKET & PAREN TRACKING) ---
+  # --- CONTEXT GROUPS (BRACKET, PAREN & BRACE TRACKING) ---
   arrays:
     - match: '\['
       scope: punctuation.section.brackets.begin.simp
@@ -143,7 +145,7 @@ contexts:
         - match: '\]'
           scope: punctuation.section.brackets.end.simp
           pop: true
-        - include: main # This allows highlighting strings/numbers INSIDE the array!
+        - include: main
 
   groups:
     - match: '\('
@@ -153,8 +155,19 @@ contexts:
         - match: '\)'
           scope: punctuation.section.parens.end.simp
           pop: true
-        - include: main # Allows parsing code inside brackets correctly
+        - include: main
+
+  blocks:
+    - match: '\{'
+      scope: punctuation.section.braces.begin.simp
+      push:
+        - meta_scope: meta.braces.simp
+        - match: '\}'
+          scope: punctuation.section.braces.end.simp
+          pop: true
+        - include: main
 
   invalid-brackets:
-    - match: '\]|\)'
+    # Added \} to track stray closing curly braces
+    - match: '\]|\)|\}'
       scope: invalid.illegal.stray-bracket.simp

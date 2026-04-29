@@ -1,15 +1,15 @@
 let x = 400
 let y = 300
 
-function reset_player ()
+function reset_player () {
     x = 400
     y = 300
-end
+}
 
-while true then
-    if is_key_down ("SPACE") then
+while true {
+    if is_key_down ("SPACE") {
         reset_player ()
-    end
+    }
 
     // Cast bool to int and use as axis for movement
     let xaxis = is_key_down ("RIGHT")::int - is_key_down ("LEFT")::int
@@ -22,4 +22,4 @@ while true then
 
     // Halt execution for 1 step/frame
     sleep 0
-end
+}
