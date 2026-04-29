@@ -2,6 +2,23 @@ package simp
 
 import "core:strings"
 
+Block_Type :: enum {
+    While,
+    For,
+    Foreach,
+    Function,
+    If,
+    Else,
+    Array,
+    Object,
+}
+
+Block_Ref :: struct {
+    type:   Block_Type,
+    index:  int,
+    breaks: [dynamic]int,
+}
+
 intern_string :: proc(state: ^State, text: string) -> string {
     if cached_string, exists := state.string_cache[text]; exists {
         return cached_string
@@ -47,13 +64,13 @@ free_array :: proc(state: ^State, target_array: ^Array) {
 }
 
 @(private = "package")
-_compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jump_table, break_table, continue_table: map[int]int) {
-    jump_table = make(map[int]int, allocator = allocator)
-    break_table = make(map[int]int, allocator = allocator)
-    continue_table = make(map[int]int, allocator = allocator)
+_compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []int {
+    jump_table := make([]int, len(tokens), allocator)
+    for i := 0; i < len(tokens); i += 1 {
+        jump_table[i] = -1
+    }
 
-    label_map := make(map[string]int)
-    defer delete(label_map)
+    label_map := make(map[string]int, 16, context.temp_allocator)
 
     for token_index := 0; token_index < len(tokens); token_index += 1 {
         if tokens[token_index].keyword == .Label {
@@ -64,24 +81,27 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
         }
     }
 
-    stack := make([dynamic]Block_Ref, allocator)
-    defer delete(stack)
+    stack := make([dynamic]Block_Ref, context.temp_allocator)
 
     for token_index := 0; token_index < len(tokens); token_index += 1 {
         token := tokens[token_index]
 
         #partial switch token.keyword {
         case .While:
-            append(&stack, Block_Ref{type = .While, index = token_index})
+            append(&stack, Block_Ref{type = .While, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
 
         case .For:
-            append(&stack, Block_Ref{type = .For, index = token_index})
+            append(&stack, Block_Ref{type = .For, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
 
         case .Foreach:
-            append(&stack, Block_Ref{type = .Foreach, index = token_index})
+            append(&stack, Block_Ref{type = .Foreach, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
 
         case .Function:
-            append(&stack, Block_Ref{type = .Function, index = token_index})
+            append(&stack, Block_Ref{type = .Function, index = token_index, breaks = nil})
+
+        case .Array, .Object:
+            // <- FIX: Allows loops outside these not to be falsely ended!
+            append(&stack, Block_Ref{type = token.keyword == .Array ? .Array : .Object, index = token_index, breaks = nil})
 
         case .If:
             is_block := false
@@ -108,13 +128,12 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
                             }
                         }
                     }
-
                     break
                 }
             }
 
             if is_block {
-                append(&stack, Block_Ref{type = .If, index = token_index})
+                append(&stack, Block_Ref{type = .If, index = token_index, breaks = nil})
             }
 
         case .Else:
@@ -122,7 +141,7 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
                 block_reference := pop(&stack)
                 jump_table[block_reference.index] = token_index
 
-                append(&stack, Block_Ref{type = .Else, index = token_index})
+                append(&stack, Block_Ref{type = .Else, index = token_index, breaks = nil})
             }
 
         case .End:
@@ -130,21 +149,32 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
                 block_reference := pop(&stack)
                 jump_table[block_reference.index] = token_index
                 jump_table[token_index] = block_reference.index
+
+                if block_reference.breaks != nil {
+                    for b in block_reference.breaks {
+                        jump_table[b] = token_index // Breaks instantly map to the End token
+                    }
+                }
             }
 
-        case .Break, .Continue:
+        case .Break:
             for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
                 current_block := stack[stack_index].type
-
                 is_loop := current_block == .While || current_block == .For || current_block == .Foreach
 
                 if is_loop {
-                    if token.keyword == .Break {
-                        break_table[token_index] = stack[stack_index].index
-                    } else {
-                        continue_table[token_index] = stack[stack_index].index
-                    }
+                    append(&stack[stack_index].breaks, token_index)
+                    break
+                }
+            }
 
+        case .Continue:
+            for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
+                current_block := stack[stack_index].type
+                is_loop := current_block == .While || current_block == .For || current_block == .Foreach
+
+                if is_loop {
+                    jump_table[token_index] = stack[stack_index].index
                     break
                 }
             }
@@ -159,5 +189,5 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> (jum
         }
     }
 
-    return jump_table, break_table, continue_table
+    return jump_table
 }

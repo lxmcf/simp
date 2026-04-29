@@ -11,22 +11,6 @@ import "core:strings"
 // Parser Types
 // -----------------------------------------------------------------------------
 
-Block_Type :: enum {
-    While,
-    For,
-    Foreach,
-    Function,
-    If,
-    Else,
-    Array,
-    Object,
-}
-
-Block_Ref :: struct {
-    type:  Block_Type,
-    index: int,
-}
-
 Parser :: struct {
     tokens:   []Token,
     position: int,
@@ -52,124 +36,6 @@ _advance :: proc(parser: ^Parser) -> Token {
     }
 
     return token
-}
-
-_build_jump_table :: proc(state: ^State) {
-    clear(&state.jump_table)
-    clear(&state.break_table)
-    clear(&state.continue_table)
-
-    tokens := state.tokens[:]
-
-    label_map := make(map[string]int)
-    defer delete(label_map)
-
-    for token_index := 0; token_index < len(tokens); token_index += 1 {
-        if tokens[token_index].keyword == .Label {
-            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
-                label_name := tokens[token_index + 1].text
-                label_map[label_name] = token_index
-            }
-        }
-    }
-
-    stack := make([dynamic]Block_Ref, context.temp_allocator)
-
-    for token_index := 0; token_index < len(tokens); token_index += 1 {
-        token := tokens[token_index]
-
-        #partial switch token.keyword {
-        case .Goto:
-            if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
-                label_name := tokens[token_index + 1].text
-
-                if target_idx, exists := label_map[label_name]; exists {
-                    state.jump_table[token_index] = target_idx
-                }
-            }
-
-        case .While:
-            append(&stack, Block_Ref{type = .While, index = token_index})
-
-        case .For:
-            append(&stack, Block_Ref{type = .For, index = token_index})
-
-        case .Foreach:
-            append(&stack, Block_Ref{type = .Foreach, index = token_index})
-
-        case .Function:
-            append(&stack, Block_Ref{type = .Function, index = token_index})
-
-        case .Array:
-            append(&stack, Block_Ref{type = .Array, index = token_index})
-
-        case .Object:
-            append(&stack, Block_Ref{type = .Object, index = token_index})
-
-        case .If:
-            is_block := false
-
-            for search_index := token_index + 1; search_index < len(tokens); search_index += 1 {
-                if tokens[search_index].keyword == .Then {
-                    if search_index + 1 < len(tokens) {
-                        next_token_type := tokens[search_index + 1].type
-
-                        if next_token_type == .Newline || next_token_type == .Colon {
-                            is_block = true
-                        } else {
-                            line_number := tokens[search_index].line
-
-                            for inner_index := search_index + 1; inner_index < len(tokens); inner_index += 1 {
-                                if tokens[inner_index].line != line_number {
-                                    break
-                                }
-
-                                if tokens[inner_index].keyword == .End || tokens[inner_index].keyword == .Else {
-                                    is_block = true
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    break
-                }
-            }
-
-            if is_block {
-                append(&stack, Block_Ref{type = .If, index = token_index})
-            }
-
-        case .Else:
-            if len(stack) > 0 && stack[len(stack) - 1].type == .If {
-                block_reference := pop(&stack)
-                state.jump_table[block_reference.index] = token_index
-
-                append(&stack, Block_Ref{type = .Else, index = token_index})
-            }
-
-        case .End:
-            if len(stack) > 0 {
-                block_reference := pop(&stack)
-                state.jump_table[block_reference.index] = token_index
-                state.jump_table[token_index] = block_reference.index
-            }
-
-        case .Break, .Continue:
-            for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
-                current_block := stack[stack_index].type
-                is_loop := current_block == .While || current_block == .For || current_block == .Foreach
-
-                if is_loop {
-                    if token.keyword == .Break {
-                        state.break_table[token_index] = stack[stack_index].index
-                    } else {
-                        state.continue_table[token_index] = stack[stack_index].index
-                    }
-                    break
-                }
-            }
-        }
-    }
 }
 
 _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) -> (Value, bool) {
@@ -239,7 +105,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         input_buffer: [1024]u8
         if _, read_error := os.read(os.stdin, input_buffer[:]); read_error != nil {
-            // TODO: Look into errors more, for now just print default odin error
             return fmt.tprintf("Failed to pull text: %v", read_error), false
         }
 
@@ -300,7 +165,6 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
     case .Exit:
         evaluated_value := _parse_expression(state, parser)
-        fmt.println("YoU HIT THE EXIT")
         if exit_code, is_valid := value_as_int(evaluated_value); is_valid {
             state.exit_value = exit_code
         } else {
@@ -328,7 +192,8 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             return "Expected identifier after 'goto'", false
         }
 
-        if target, exists := state.jump_table[statement_index]; exists {
+        target := state.jump_table[statement_index]
+        if target != -1 {
             parser.position = target
         } else {
             return fmt.tprintf("Label '%s' not found", target_token.text), false
@@ -392,7 +257,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if !_is_truthy(condition_value) {
             target := state.jump_table[statement_index]
 
-            if target > 0 {
+            if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
@@ -468,7 +333,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if !continue_loop {
             target := state.jump_table[statement_index]
 
-            if target > 0 {
+            if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
@@ -597,7 +462,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if !continue_loop {
             target := state.jump_table[statement_index]
 
-            if target > 0 {
+            if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
@@ -609,7 +474,8 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "", true
 
     case .End:
-        if target, exists := state.jump_table[statement_index]; exists {
+        target := state.jump_table[statement_index]
+        if target != -1 {
             start_token := state.tokens[target]
 
             #partial switch start_token.keyword {
@@ -627,16 +493,17 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "", true
 
     case .Break:
-        if loop_index, exists := state.break_table[statement_index]; exists {
-            target := state.jump_table[loop_index]
-            parser.position = target + 1
+        target := state.jump_table[statement_index]
+        if target != -1 {
+            parser.position = target + 1 // target is automatically resolved to the 'End' token now!
         }
 
         return "", true
 
     case .Continue:
-        if loop_index, exists := state.continue_table[statement_index]; exists {
-            parser.position = loop_index
+        target := state.jump_table[statement_index]
+        if target != -1 {
+            parser.position = target
         }
 
         return "", true
@@ -694,7 +561,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         target := state.jump_table[statement_index]
 
-        if target > 0 {
+        if target != -1 {
             parser.position = target + 1
         } else {
             _skip_block_forward(parser)
@@ -716,7 +583,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         }
         _advance(parser)
 
-        is_block := (statement_index in state.jump_table)
+        is_block := state.jump_table[statement_index] != -1
 
         if is_block {
             if _is_truthy(condition) {
@@ -724,7 +591,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 target := state.jump_table[statement_index]
 
-                if target > 0 {
+                if target != -1 {
                     parser.position = target + 1
                 } else {
                     _skip_if_false(parser)
@@ -753,7 +620,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     case .Else:
         target := state.jump_table[statement_index]
 
-        if target > 0 {
+        if target != -1 {
             parser.position = target + 1
         } else {
             _skip_else_block(parser)

@@ -77,9 +77,7 @@ State :: struct {
     tracked_arrays:   map[^Array]bool,
 
     // Performance Optimization & AST
-    jump_table:       map[int]int,
-    break_table:      map[int]int,
-    continue_table:   map[int]int,
+    jump_table:       []int,
     imported_scripts: [dynamic]string,
     tokens:           [dynamic]Token,
     position:         int,
@@ -143,8 +141,6 @@ state_destroy :: proc(state: ^State) {
     delete(state.argument_stack)
 
     delete(state.jump_table)
-    delete(state.break_table)
-    delete(state.continue_table)
 
     for tracked_object in state.tracked_objects {
         delete(tracked_object^)
@@ -187,8 +183,6 @@ state_load_source :: proc(state: ^State, script_data: string, filename: string) 
 
     if state.jump_table != nil {
         delete(state.jump_table)
-        delete(state.break_table)
-        delete(state.continue_table)
     }
 
     magic_header_length := len(MAGIC_HEADER)
@@ -211,10 +205,7 @@ state_load_source :: proc(state: ^State, script_data: string, filename: string) 
         state.tokens = make([dynamic]Token, len(temporary_tokens))
         copy(state.tokens[:], temporary_tokens)
 
-        computed_jump_table, computed_break_table, computed_continue_table := _compute_tables(state.tokens[:], context.allocator)
-        state.jump_table = computed_jump_table
-        state.break_table = computed_break_table
-        state.continue_table = computed_continue_table
+        state.jump_table = _compute_tables(state.tokens[:], context.allocator)
     }
 
     state.position = 0
@@ -262,33 +253,36 @@ state_append_source :: proc(state: ^State, script_data: string, filename: string
         state.tokens = make([dynamic]Token, state.allocator)
     }
 
-    offset := len(state.tokens)
-
-    computed_jump_table, computed_break_table, computed_continue_table := _compute_tables(temporary_tokens, context.temp_allocator)
+    computed_jump_table := _compute_tables(temporary_tokens, context.temp_allocator)
 
     if state.jump_table == nil {
-        state.jump_table = make(map[int]int, 16, state.allocator)
-        state.break_table = make(map[int]int, 16, state.allocator)
-        state.continue_table = make(map[int]int, 16, state.allocator)
-    }
+        state.jump_table = make([]int, len(temporary_tokens), state.allocator)
+        copy(state.jump_table, computed_jump_table)
+    } else {
+        old_len := len(state.jump_table)
+        new_len := old_len + len(temporary_tokens)
 
-    for key, value in computed_jump_table {
-        state.jump_table[key + offset] = value + offset
-    }
+        new_jump_table := make([]int, new_len, state.allocator)
+        copy(new_jump_table, state.jump_table)
 
-    for key, value in computed_break_table {
-        state.break_table[key + offset] = value + offset
-    }
+        for i := 0; i < len(computed_jump_table); i += 1 {
+            val := computed_jump_table[i]
+            if val != -1 {
+                new_jump_table[old_len + i] = val + old_len
+            } else {
+                new_jump_table[old_len + i] = -1
+            }
+        }
 
-    for key, value in computed_continue_table {
-        state.continue_table[key + offset] = value + offset
+        delete(state.jump_table)
+        state.jump_table = new_jump_table
     }
 
     for token in temporary_tokens {
         append(&state.tokens, token)
     }
 
-    state.position = offset
+    state.position = len(state.tokens) - len(temporary_tokens)
     state.is_sleeping = false
     state.sleep_timer = 0
     state.should_close = false

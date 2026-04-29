@@ -6,29 +6,10 @@ serialise_script :: proc(script: string, filename: string) -> (bytecode: []u8, o
     visited_files := make(map[string]bool, 16, context.temp_allocator)
     tokens := _tokenise_and_resolve(nil, script, filename, &visited_files) or_return
 
-    jump_table, break_table, continue_table := _compute_tables(tokens, context.temp_allocator)
+    jump_table := _compute_tables(tokens, context.temp_allocator)
 
     buffer := make([dynamic]u8)
     append(&buffer, ..transmute([]u8)MAGIC_HEADER)
-
-    // Pre-computed tables
-    _write_u32(&buffer, u32(len(jump_table)))
-    for key, value in jump_table {
-        _write_u32(&buffer, u32(key))
-        _write_u32(&buffer, u32(value))
-    }
-
-    _write_u32(&buffer, u32(len(break_table)))
-    for key, value in break_table {
-        _write_u32(&buffer, u32(key))
-        _write_u32(&buffer, u32(value))
-    }
-
-    _write_u32(&buffer, u32(len(continue_table)))
-    for key, value in continue_table {
-        _write_u32(&buffer, u32(key))
-        _write_u32(&buffer, u32(value))
-    }
 
     // Tokens
     _write_u32(&buffer, u32(len(tokens)))
@@ -46,41 +27,28 @@ serialise_script :: proc(script: string, filename: string) -> (bytecode: []u8, o
         }
     }
 
+    // Pre-computed table (slice)
+    valid_jumps := 0
+    for val in jump_table {
+        if val != -1 {
+            valid_jumps += 1
+        }
+    }
+
+    _write_u32(&buffer, u32(valid_jumps))
+    for i := 0; i < len(jump_table); i += 1 {
+        if jump_table[i] != -1 {
+            _write_u32(&buffer, u32(i))
+            _write_u32(&buffer, u32(jump_table[i]))
+        }
+    }
+
     return buffer[:], true
 }
 
 @(private = "package")
 _deserialise_bytecode :: proc(state: ^State, bytecode_data: string) {
     index := 0
-
-    // Precomputed tables
-    clear(&state.jump_table)
-    clear(&state.break_table)
-    clear(&state.continue_table)
-
-    number_of_jumps := _read_u32(bytecode_data, &index)
-    for _ in 0 ..< number_of_jumps {
-        jump_key := _read_u32(bytecode_data, &index)
-        jump_value := _read_u32(bytecode_data, &index)
-
-        state.jump_table[jump_key] = jump_value
-    }
-
-    number_of_breaks := _read_u32(bytecode_data, &index)
-    for _ in 0 ..< number_of_breaks {
-        break_key := _read_u32(bytecode_data, &index)
-        break_value := _read_u32(bytecode_data, &index)
-
-        state.break_table[break_key] = break_value
-    }
-
-    number_of_continues := _read_u32(bytecode_data, &index)
-    for _ in 0 ..< number_of_continues {
-        continue_key := _read_u32(bytecode_data, &index)
-        continue_value := _read_u32(bytecode_data, &index)
-
-        state.continue_table[continue_key] = continue_value
-    }
 
     // Tokens
     number_of_tokens := _read_u32(bytecode_data, &index)
@@ -113,6 +81,24 @@ _deserialise_bytecode :: proc(state: ^State, bytecode_data: string) {
         }
 
         append(&state.tokens, new_token)
+    }
+
+    if state.jump_table != nil {
+        delete(state.jump_table)
+    }
+
+    state.jump_table = make([]int, number_of_tokens, state.allocator)
+
+    for i in 0 ..< number_of_tokens {
+        state.jump_table[i] = -1
+    }
+
+    number_of_jumps := _read_u32(bytecode_data, &index)
+    for _ in 0 ..< number_of_jumps {
+        jump_key := _read_u32(bytecode_data, &index)
+        jump_value := _read_u32(bytecode_data, &index)
+
+        state.jump_table[jump_key] = jump_value
     }
 }
 
