@@ -50,6 +50,7 @@ Token_Keyword :: distinct enum {
     // BUILTIN DIRECTIVES
     Import,
     Put,
+    Pull,
     Sleep,
     Delete,
     Label,
@@ -496,6 +497,9 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
 
                 case "put":
                     keyword = .Put
+
+                case "pull":
+                    keyword = .Pull
 
                 case "sleep":
                     keyword = .Sleep

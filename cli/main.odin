@@ -505,7 +505,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
                 color = ANSI_CYAN_BOLD
                 expecting_declaration = true
 
-            case "import", "put", "sleep", "delete", "label", "goto", "new", "exit":
+            case "import", "put", "pull", "sleep", "delete", "label", "goto", "new", "exit":
                 color = ANSI_MAGENTA_BOLD
                 expecting_declaration = false
 

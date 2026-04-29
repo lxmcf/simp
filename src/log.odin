@@ -13,31 +13,29 @@ Log_Level :: distinct enum u8 {
 }
 
 default_log_proc :: proc(level: Log_Level, message: string, line: int = -1) {
-    location: string
-    defer if len(location) > 0 {
-        delete(location)
-    }
-
-    if level != .Info && level != .None {
-        if line >= 0 {
-            location = fmt.aprintf("(Line %d):", line)
-        }
-    }
-
-    switch level {
-    case .None:
-        fmt.println(message)
-
+    level_prefix := ""
+    #partial switch level {
     case .Info:
-        fmt.printfln("[INFO]  -> %s", message)
+        level_prefix = "[INFO]  "
 
     case .Warning:
-        fmt.printfln("[WARN]  -> %s %s", location, message)
+        level_prefix = "[WARN]  "
 
     case .Error:
-        fmt.eprintfln("[ERROR] -> %s %s", location, message)
+        level_prefix = "[ERROR] "
 
     case .Fatal:
-        fmt.eprintfln("[FATAL] -> %s %s", location, message)
+        level_prefix = "[FATAL] "
+    }
+
+    if level == .None {
+        fmt.println(message)
+        return
+    }
+
+    if line >= 0 {
+        fmt.printfln("%s -> (Line %d): %s", level_prefix, line, message)
+    } else {
+        fmt.printfln("%s -> %s", level_prefix, message)
     }
 }

@@ -3,6 +3,7 @@
 package simp
 
 import "core:fmt"
+import "core:os"
 import "core:strconv"
 import "core:strings"
 
@@ -230,11 +231,26 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         return "", true
 
+    case .Pull:
+        prompt_value := _parse_expression(state, parser)
+        fmt.print(value_to_string(prompt_value))
+
+        os.flush(os.stdout)
+
+        input_buffer: [1024]u8
+        if _, read_error := os.read(os.stdin, input_buffer[:]); read_error != nil {
+            // TODO: Look into errors more, for now just print default odin error
+            return fmt.tprintf("Failed to pull text: %v", read_error), false
+        }
+
+        return "", true
+
     case .Sleep:
         evaluated_value := _parse_expression(state, parser)
         if sleep_time_ms, time_is_valid := value_as_f64(evaluated_value); time_is_valid {
             state.sleep_timer = sleep_time_ms
         }
+
         state.is_sleeping = true
 
     case .Delete:
@@ -949,6 +965,22 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
 
                 return DEFAULT_VALUE
             }
+
+        case .Pull:
+            prompt_value := _parse_expression(state, parser)
+            fmt.print(value_to_string(prompt_value))
+
+            os.flush(os.stdout)
+
+            input_buffer: [1024]u8
+            bytes_read, read_error := os.read(os.stdin, input_buffer[:])
+
+            user_input_text := ""
+            if read_error == nil && bytes_read > 0 {
+                user_input_text = strings.trim_right_space(string(input_buffer[:bytes_read]))
+            }
+
+            return intern_string(state, user_input_text)
 
         case .True:
             value = true

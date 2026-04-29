@@ -72,7 +72,7 @@ contexts:
 
   # --- DIRECTIVES ---
   directives:
-    - match: '\b(import|put|sleep|delete|label|goto|new|exit)\b'
+    - match: '\b(import|put|pull|sleep|delete|label|goto|new|exit)\b'
       scope: keyword.other.directive.simp
 
   # --- KEYWORDS ---
