@@ -163,6 +163,31 @@ values_are_equal :: proc(left: Value, right: Value) -> bool {
         return left_number == right_number
     }
 
+    // Allow for 'type' checking
+    if left_type, is_left_type := left.(Type_Value); is_left_type {
+            #partial switch _ in right {
+            case Null_Value: return left_type == .Null
+            case int:        return left_type == .Int
+            case f64:        return left_type == .Float
+            case string:     return left_type == .String
+            case bool:       return left_type == .Bool
+            case ^Object:    return left_type == .Object
+            case ^Array:     return left_type == .Array
+            case Type_Value: return left_type == right.(Type_Value)
+            }
+        }
+        if right_type, is_right_type := right.(Type_Value); is_right_type {
+            #partial switch _ in left {
+            case Null_Value: return right_type == .Null
+            case int:        return right_type == .Int
+            case f64:        return right_type == .Float
+            case string:     return right_type == .String
+            case bool:       return right_type == .Bool
+            case ^Object:    return right_type == .Object
+            case ^Array:     return right_type == .Array
+            }
+        }
+
     return left == right
 }
 

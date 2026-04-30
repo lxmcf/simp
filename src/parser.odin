@@ -482,17 +482,26 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     case .If:
         condition := _parse_expression(state, parser)
 
-        // FIX 4: Handle both block '{' and 1-line 'then'
         if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
             target := state.jump_table[statement_index]
-            if target != -1 {
-                if _is_truthy(condition) {
-                    return "", true
-                } else {
+
+            if _is_truthy(condition) {
+                return "", true
+            } else {
+                if target != -1 {
                     parser.position = target
-                    return "", true
+                    // If we jumped to 'else', we want to skip the keyword and the '{'
+                    if state.tokens[parser.position].keyword == .Else {
+                        _advance(parser) // skip 'else'
+                        if _peek_ahead(parser).type == .LBrace {
+                            _advance(parser)
+                        }
+                    }
+                } else {
+                    _skip_block_forward(parser)
                 }
+                return "", true
             }
         } else if _peek_ahead(parser).keyword == .Then {
             _advance(parser)
@@ -511,12 +520,16 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         return "Expected '{' or 'then' after if condition", false
 
     case .Else:
-        if _peek_ahead(parser).type == .LBrace {
-            _advance(parser)
-        }
+        // If the interpreter hits 'else' without jumping to it, it means
+        // the 'if' block just finished. We must jump over the 'else' block.
         target := state.jump_table[statement_index]
         if target != -1 {
             parser.position = target + 1
+        } else {
+            if _peek_ahead(parser).type == .LBrace {
+                _advance(parser)
+            }
+            _skip_block_forward(parser)
         }
         return "", true
 
@@ -525,6 +538,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             target := state.jump_table[statement_index]
             if target != -1 {
                 if target < statement_index {
+                    // Backward jump (Loops / Functions)
                     start_tok := state.tokens[target]
                     is_loop := start_tok.keyword == .While || start_tok.keyword == .For || start_tok.keyword == .Foreach
                     if is_loop {
@@ -534,10 +548,9 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                         state.return_value = DEFAULT_VALUE
                     }
                 } else {
+                    // Forward jump (End of an IF block jumping over the ELSE block)
                     parser.position = target
                 }
-            } else {
-                _skip_block_backward(parser)
             }
             return "", true
         }

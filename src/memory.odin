@@ -2,19 +2,8 @@ package simp
 
 import "core:strings"
 
-Block_Type :: enum {
-    While,
-    For,
-    Foreach,
-    Function,
-    If,
-    Else,
-    Array,
-    Object,
-}
-
 Block_Ref :: struct {
-    type:   Block_Type,
+    type:   Token_Keyword,
     index:  int,
     breaks: [dynamic]int,
 }
@@ -71,12 +60,10 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
     }
 
     label_map := make(map[string]int, 16, context.temp_allocator)
-
     for token_index := 0; token_index < len(tokens); token_index += 1 {
         if tokens[token_index].keyword == .Label {
             if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
-                label_name := tokens[token_index + 1].text
-                label_map[label_name] = token_index
+                label_map[tokens[token_index + 1].text] = token_index
             }
         }
     }
@@ -87,106 +74,90 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
         token := tokens[token_index]
 
         #partial switch token.keyword {
-        case .While:
-            append(&stack, Block_Ref{type = .While, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
+        case .While, .For, .Foreach:
+            append(&stack, Block_Ref{type = token.keyword, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
 
-        case .For:
-            append(&stack, Block_Ref{type = .For, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
-
-        case .Foreach:
-            append(&stack, Block_Ref{type = .Foreach, index = token_index, breaks = make([dynamic]int, context.temp_allocator)})
-
-        case .Function:
-            append(&stack, Block_Ref{type = .Function, index = token_index, breaks = nil})
+        case .Function, .If:
+            append(&stack, Block_Ref{type = token.keyword, index = token_index})
 
         case .Array, .Object:
-            block_type := Block_Type.Object
-            if token.keyword == .Array {
-                block_type = .Array
-            }
-            append(&stack, Block_Ref{type = block_type, index = token_index, breaks = nil})
-
-        case .If:
-            is_block := false
-
-            for search_index := token_index + 1; search_index < len(tokens); search_index += 1 {
-                tok := tokens[search_index]
-                if tok.type == .LBrace {
-                    is_block = true
-                    break
-                }
-                if tok.keyword == .Then {
-                    is_block = false
-                    break
-                }
-                if tok.type == .Newline {
-                    break
-                }
-            }
-
-            if is_block {
-                append(&stack, Block_Ref{type = .If, index = token_index, breaks = nil})
-            }
+            append(&stack, Block_Ref{type = token.keyword, index = token_index})
 
         case .None:
             if token.type == .RBrace {
                 if len(stack) > 0 {
-                    block_reference := pop(&stack)
+                    block_ref := pop(&stack)
 
-                    has_else := token_index + 1 < len(tokens) && tokens[token_index + 1].keyword == .Else
+                    // Check if this '}' belongs to an 'if' that is followed by 'else'
+                    // Ensure we ignore/skip any potential newlines
+                    else_keyword_index := -1
+                    for search_index := token_index + 1; search_index < len(tokens); search_index += 1 {
+                        if tokens[search_index].type == .Newline {
+                            continue
+                        }
+                        if tokens[search_index].keyword == .Else {
+                            else_keyword_index = search_index
+                        }
+                        break
+                    }
 
-                    if block_reference.type == .If && has_else {
-                        else_index := token_index + 1
-                        jump_table[block_reference.index] = else_index
+                    if block_ref.type == .If && else_keyword_index != -1 {
+                        // 1. The 'if' keyword jumps to the 'else' keyword if the condition is false
+                        jump_table[block_ref.index] = else_keyword_index
 
-                        append(&stack, Block_Ref{type = .Else, index = token_index, breaks = nil})
-                    } else if block_reference.type == .Else {
-                        jump_table[block_reference.index] = token_index
+                        // 2. This '}' (end of if) needs to jump to the end of the 'else' block
+                        // We push a reference to this '}' onto the stack so the Else's '}' can find it
+                        append(&stack, Block_Ref{type = .Else, index = token_index})
+
+                        // 3. Push the 'else' keyword so its '}' can link back to it
+                        append(&stack, Block_Ref{type = .None, index = else_keyword_index}) // Use .None as a generic marker to avoid object block collisions
+                    } else if block_ref.type == .None && len(stack) > 0 && stack[len(stack) - 1].type == .Else {
+                        // This '}' belongs to an 'else' block.
+                        actual_else_keyword_index := block_ref.index
+                        if_end_brace_index := pop(&stack).index
+
+                        // 1. The 'else' keyword jumps to the end of its own block
+                        jump_table[actual_else_keyword_index] = token_index
+
+                        // 2. The 'if' block's end-brace jumps to the end of the 'else' block
+                        jump_table[if_end_brace_index] = token_index
+
+                        // 3. The 'else' keyword's closure
+                        jump_table[token_index] = actual_else_keyword_index
                     } else {
-                        jump_table[block_reference.index] = token_index
-                        jump_table[token_index] = block_reference.index
+                        // Standard loop/function closure
+                        jump_table[block_ref.index] = token_index
+                        jump_table[token_index] = block_ref.index
 
-                        if block_reference.breaks != nil {
-                            for break_index in block_reference.breaks {
-                                jump_table[break_index] = token_index
+                        if block_ref.breaks != nil {
+                            for b in block_ref.breaks {
+                                jump_table[b] = token_index
                             }
-                            delete(block_reference.breaks)
+                            delete(block_ref.breaks)
                         }
                     }
                 }
             }
 
-        case .Break:
-            for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
-                current_block := stack[stack_index].type
-                is_loop := current_block == .While || current_block == .For || current_block == .Foreach
-
-                if is_loop {
-                    append(&stack[stack_index].breaks, token_index)
-                    break
-                }
-            }
-
-        case .Continue:
-            for stack_index := len(stack) - 1; stack_index >= 0; stack_index -= 1 {
-                current_block := stack[stack_index].type
-                is_loop := current_block == .While || current_block == .For || current_block == .Foreach
-
-                if is_loop {
-                    jump_table[token_index] = stack[stack_index].index
+        case .Break, .Continue:
+            for i := len(stack) - 1; i >= 0; i -= 1 {
+                if stack[i].type == .While || stack[i].type == .For || stack[i].type == .Foreach {
+                    if token.keyword == .Break {
+                        append(&stack[i].breaks, token_index)
+                    } else {
+                        jump_table[token_index] = stack[i].index
+                    }
                     break
                 }
             }
 
         case .Goto:
             if token_index + 1 < len(tokens) && tokens[token_index + 1].type == .Ident {
-                name := tokens[token_index + 1].text
-                if target_idx, exists := label_map[name]; exists {
-                    jump_table[token_index] = target_idx
+                if target, exists := label_map[tokens[token_index + 1].text]; exists {
+                    jump_table[token_index] = target
                 }
             }
         }
     }
-
     return jump_table
 }
