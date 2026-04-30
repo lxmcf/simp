@@ -129,32 +129,26 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             variable_value := _get_var(state, target_identifier)
 
             if object_reference, is_object := variable_value.(^Object); is_object {
-                if object_reference in state.tracked_objects {
-                    delete(object_reference^)
-                    free(object_reference)
-                    delete_key(&state.tracked_objects, object_reference)
-                }
+                free_object(state, object_reference)
                 _set_var(state, target_identifier, DEFAULT_VALUE)
             } else if array_reference, is_array := variable_value.(^Array); is_array {
-                if array_reference in state.tracked_arrays {
-                    delete(array_reference^)
-                    free(array_reference)
-                    delete_key(&state.tracked_arrays, array_reference)
-                }
+                free_array(state, array_reference)
                 _set_var(state, target_identifier, DEFAULT_VALUE)
             } else {
-                return fmt.tprintf("Variable '%s' is not an object or array and cannot be deleted", target_identifier), false
+                // If it's a primitive, just set to null
+                _set_var(state, target_identifier, DEFAULT_VALUE)
             }
         } else if target_identifier in state.functions {
-            function := &state.functions[target_identifier]
+            function := state.functions[target_identifier] // Copy the struct
             for argument in function.arguments {
                 delete(argument)
             }
+            delete(function.arguments) // <-- CRITICAL FIX: Delete the slice itself
             delete_key(&state.functions, target_identifier)
         } else if target_identifier in state.native_procs {
             delete_key(&state.native_procs, target_identifier)
         } else {
-            return fmt.tprintf("Cannot delete: Variable '%s' does not exist", target_identifier), false
+            return fmt.tprintf("Cannot delete: Variable or Function '%s' does not exist", target_identifier), false
         }
         return "", true
 
