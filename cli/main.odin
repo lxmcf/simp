@@ -72,21 +72,33 @@ cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
 }
 
 cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
+    fmt.print(ANSI_GREEN_BOLD)
     fmt.println("\n--- Native Functions ---")
+    fmt.print(ANSI_RESET)
+
     if len(state.native_procs) == 0 {
         fmt.println("[ Empty ]")
     } else {
         for key in state.native_procs {
+            fmt.print(ANSI_YELLOW)
             fmt.printfln(" %s", key)
+            fmt.print(ANSI_RESET)
         }
     }
 
+    fmt.print(ANSI_GREEN_BOLD)
     fmt.println("\n--- User Functions ---")
+    fmt.print(ANSI_RESET)
+
     if len(state.functions) == 0 {
         fmt.println("[ Empty ]")
     } else {
         for key, func in state.functions {
-            fmt.printf(" %s (", key)
+            fmt.print(ANSI_YELLOW)
+            fmt.printf(" %s ", key)
+            fmt.print(ANSI_RESET)
+
+            fmt.printf("(")
 
             for arg, idx in func.arguments {
                 if idx > 0 {
@@ -411,7 +423,6 @@ is_alphanumeric :: proc(c: u8) -> bool {
 highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
     builder := strings.builder_make(context.temp_allocator)
     index := 0
-    paren_depth, bracket_depth, brace_depth := 0, 0, 0
     expecting_declaration := false
 
     for index < len(input) {
@@ -526,39 +537,6 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
         }
 
         switch character {
-        case '(':
-            paren_depth += 1
-        case '[':
-            bracket_depth += 1
-        case '{':
-            brace_depth += 1
-        case ')':
-            paren_depth -= 1
-            if paren_depth < 0 {
-                strings.write_string(&builder, ANSI_RED)
-                strings.write_byte(&builder, ')')
-                strings.write_string(&builder, ANSI_RESET)
-                paren_depth, index = 0, index + 1
-                continue
-            }
-        case ']':
-            bracket_depth -= 1
-            if bracket_depth < 0 {
-                strings.write_string(&builder, ANSI_RED)
-                strings.write_byte(&builder, ']')
-                strings.write_string(&builder, ANSI_RESET)
-                bracket_depth, index = 0, index + 1
-                continue
-            }
-        case '}':
-            brace_depth -= 1
-            if brace_depth < 0 {
-                strings.write_string(&builder, ANSI_RED)
-                strings.write_byte(&builder, '}')
-                strings.write_string(&builder, ANSI_RESET)
-                brace_depth, index = 0, index + 1
-                continue
-            }
         case '@', '#', '^', '&', '`', '~':
             strings.write_string(&builder, ANSI_RED)
             strings.write_byte(&builder, character)
