@@ -381,7 +381,7 @@ state_step :: proc(state: ^State, delta_time: f64, max_operations: int = 256) ->
         }
 
         next_token_type := _peek_ahead(&parser).type
-        if next_token_type == .Newline || next_token_type == .Colon {
+        if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Semicolon {
             _advance(&parser)
             continue
         }

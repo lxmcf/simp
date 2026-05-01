@@ -54,10 +54,6 @@ print_usage :: proc() {
     fmt.println("  -o, --out <file>     Specify output file for compilation (default: <script>.sbin)")
 }
 
-cmd_quit :: proc(state: ^simp.State, arguments: []simp.Value) {
-    os.exit(0)
-}
-
 cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
     fmt.println("\n--- Global Variables ---")
     global_scope := state.scopes[0]
@@ -201,7 +197,6 @@ main :: proc() {
         }
 
         if !config.minimal_repl {
-            simp.bind_native_proc(&state, "quit", cmd_quit)
             simp.bind_native_proc(&state, "vars", cmd_vars)
             simp.bind_native_proc(&state, "help", cmd_help)
         }
@@ -291,10 +286,11 @@ run_repl :: proc(state: ^simp.State) {
     fmt.print(ANSI_GREEN_BOLD)
     fmt.println("=======================================")
     fmt.println("                SIMP REPL              ")
-    fmt.println("")
+    fmt.println("                                       ")
     fmt.println("help (): Print all available functions ")
     fmt.println("vars (): Print all defined variables   ")
-    fmt.println("quit (): Exit the REPL")
+    fmt.println("                                       ")
+    fmt.println("exit 0: Exir the REPL with exit code   ")
     fmt.println("=======================================")
     fmt.print(ANSI_RESET)
 
@@ -313,19 +309,20 @@ run_repl :: proc(state: ^simp.State) {
     defer strings.builder_destroy(&script_accumulator)
 
     block_depth := 0
+    is_in_multiline_comment := false
 
     for !state.should_close {
         indent_str := block_depth > 0 ? strings.repeat("    ", block_depth, context.temp_allocator) : ""
         unindent_str := block_depth > 0 ? strings.repeat("    ", block_depth - 1, context.temp_allocator) : ""
 
-        prompt_prefix := block_depth == 0 ? "> " : "~ "
+        prompt_prefix := (block_depth == 0 && !is_in_multiline_comment) ? "> " : "~ "
         normal_prompt := fmt.tprintf("%s%s", prompt_prefix, indent_str)
         unindented_prompt := fmt.tprintf("%s%s", prompt_prefix, unindent_str)
 
         input_line := read_interactive_line(state, normal_prompt, unindented_prompt, &command_history)
 
         if len(strings.trim_space(input_line)) == 0 {
-            if block_depth > 0 {
+            if block_depth > 0 || is_in_multiline_comment {
                 strings.write_string(&script_accumulator, "\n")
             } else {
                 free_all(context.temp_allocator)
@@ -334,15 +331,17 @@ run_repl :: proc(state: ^simp.State) {
             continue
         }
 
-        block_depth += get_block_depth_change(input_line)
+        change, new_multiline_state := get_block_depth_change(input_line, is_in_multiline_comment)
+        block_depth += change
         if block_depth < 0 {
             block_depth = 0
         }
+        is_in_multiline_comment = new_multiline_state
 
         strings.write_string(&script_accumulator, input_line)
         strings.write_string(&script_accumulator, "\n")
 
-        if block_depth == 0 {
+        if block_depth == 0 && !is_in_multiline_comment {
             simp.state_run_snippet(state, strings.to_string(script_accumulator), os.args[0])
 
             if state.is_exiting {
@@ -362,17 +361,35 @@ run_repl :: proc(state: ^simp.State) {
     }
 }
 
-get_block_depth_change :: proc(input_line: string) -> int {
-    change := 0
+get_block_depth_change :: proc(input_line: string, in_multiline: bool = false) -> (change: int, still_in_multiline: bool) {
+    change = 0
     is_in_string := false
     char_index := 0
+    still_in_multiline = in_multiline
 
     for char_index < len(input_line) {
         current_char := input_line[char_index]
 
+        if still_in_multiline {
+            if current_char == '-' && char_index + 2 < len(input_line) && input_line[char_index + 1] == '-' && input_line[char_index + 2] == '-' {
+                still_in_multiline = false
+                char_index += 2
+            }
+            char_index += 1
+            continue
+        }
+
         // Ignore comments
         if !is_in_string && current_char == '/' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '/' {
             break
+        }
+
+        // Multi-line comments
+        if !is_in_string && current_char == '-' && char_index + 2 < len(input_line) && input_line[char_index + 1] == '-' && input_line[char_index + 2] == '-' {
+            still_in_multiline = true
+            char_index += 2
+            char_index += 1
+            continue
         }
 
         // Handle strings so we don't count braces inside them
@@ -395,7 +412,7 @@ get_block_depth_change :: proc(input_line: string) -> int {
         char_index += 1
     }
 
-    return change
+    return change, still_in_multiline
 }
 
 repl_has_var :: proc(state: ^simp.State, name: string) -> bool {
@@ -420,13 +437,40 @@ is_alphanumeric :: proc(c: u8) -> bool {
     return is_character(c) || (c >= '0' && c <= '9')
 }
 
-highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
+highlight_simp_code :: proc(state: ^simp.State, input: string, start_in_multiline: bool = false) -> string {
     builder := strings.builder_make(context.temp_allocator)
     index := 0
     expecting_declaration := false
+    is_in_multiline := start_in_multiline
 
     for index < len(input) {
+        if is_in_multiline {
+            strings.write_string(&builder, ANSI_GRAY_ITALIC)
+            for index < len(input) {
+                character := input[index]
+                strings.write_byte(&builder, character)
+                if character == '-' && index + 2 < len(input) && input[index + 1] == '-' && input[index + 2] == '-' {
+                    strings.write_byte(&builder, '-')
+                    strings.write_byte(&builder, '-')
+                    index += 3
+                    is_in_multiline = false
+                    break
+                }
+                index += 1
+            }
+            strings.write_string(&builder, ANSI_RESET)
+            continue
+        }
+
         character := input[index]
+
+        if character == '-' && index + 2 < len(input) && input[index + 1] == '-' && input[index + 2] == '-' {
+            is_in_multiline = true
+            strings.write_string(&builder, ANSI_GRAY_ITALIC)
+            strings.write_string(&builder, "---")
+            index += 3
+            continue
+        }
 
         if character == '"' {
             strings.write_string(&builder, ANSI_GREEN)
@@ -537,6 +581,12 @@ highlight_simp_code :: proc(state: ^simp.State, input: string) -> string {
         }
 
         switch character {
+        case ';':
+            strings.write_string(&builder, ANSI_GRAY_ITALIC)
+            strings.write_byte(&builder, ';')
+            strings.write_string(&builder, ANSI_RESET)
+            index += 1
+            continue
         case '@', '#', '^', '&', '`', '~':
             strings.write_string(&builder, ANSI_RED)
             strings.write_byte(&builder, character)

@@ -44,6 +44,7 @@ Token_Type :: distinct enum {
     SlashEquals,
     PercentEquals,
     Ellipsis,
+    Semicolon,
 }
 
 Token_Keyword :: distinct enum {
@@ -221,6 +222,10 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
             char_index += 1
             line_number += 1
 
+        case ';':
+            append(&tokens, Token{type = .Semicolon, keyword = .None, text = ";", line = line_number})
+            char_index += 1
+
         case '+':
             if char_index + 1 < len(script) && script[char_index + 1] == '=' {
                 append(&tokens, Token{type = .PlusEquals, keyword = .None, text = "+=", line = line_number})
@@ -231,7 +236,25 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
             }
 
         case '-':
-            if char_index + 1 < len(script) && script[char_index + 1] == '=' {
+            if char_index + 2 < len(script) && script[char_index + 1] == '-' && script[char_index + 2] == '-' {
+                char_index += 3
+                for char_index < len(script) {
+                    if script[char_index] == '\n' {
+                        line_number += 1
+                    } else if script[char_index] == '\r' {
+                        if char_index + 1 < len(script) && script[char_index + 1] == '\n' {
+                        } else {
+                            line_number += 1
+                        }
+                    }
+
+                    if char_index + 2 < len(script) && script[char_index] == '-' && script[char_index + 1] == '-' && script[char_index + 2] == '-' {
+                        char_index += 3
+                        break
+                    }
+                    char_index += 1
+                }
+            } else if char_index + 1 < len(script) && script[char_index + 1] == '=' {
                 append(&tokens, Token{type = .MinusEquals, keyword = .None, text = "-=", line = line_number})
                 char_index += 2
             } else {
@@ -409,28 +432,21 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
                     switch script[char_index] {
                     case 'n':
                         strings.write_byte(&string_builder, '\n')
-
                     case 't':
                         strings.write_byte(&string_builder, '\t')
-
                     case 'r':
                         strings.write_byte(&string_builder, '\r')
-
                     case '\\':
                         strings.write_byte(&string_builder, '\\')
-
                     case '"':
                         strings.write_byte(&string_builder, '"')
-
                     case '\n':
                         line_number += 1
-
                     case '\r':
                         if char_index + 1 < len(script) && script[char_index + 1] == '\n' {
                             char_index += 1
                         }
                         line_number += 1
-
                     case:
                         strings.write_byte(&string_builder, '\\')
                         strings.write_byte(&string_builder, script[char_index])
@@ -503,112 +519,76 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
                 switch identifier_text {
                 case "import":
                     keyword = .Import
-
                 case "put":
                     keyword = .Put
-
                 case "pull":
                     keyword = .Pull
-
                 case "sleep":
                     keyword = .Sleep
-
                 case "delete":
                     keyword = .Delete
-
                 case "label":
                     keyword = .Label
-
                 case "goto":
                     keyword = .Goto
-
                 case "new":
                     keyword = .New
-
                 case "exit":
                     keyword = .Exit
-
                 case "and":
                     keyword = .And
-
                 case "or":
                     keyword = .Or
-
                 case "not":
                     keyword = .Not
-
                 case "while":
                     keyword = .While
-
                 case "for":
                     keyword = .For
-
                 case "foreach":
                     keyword = .Foreach
-
                 case "in":
                     keyword = .In
-
                 case "break":
                     keyword = .Break
-
                 case "continue":
                     keyword = .Continue
-
                 case "function":
                     keyword = .Function
-
                 case "else":
                     keyword = .Else
-
                 case "if":
                     keyword = .If
-
                 case "let":
                     keyword = .Let
-
                 case "const":
                     keyword = .Const
-
                 case "then":
                     keyword = .Then
-
                 case "to":
                     keyword = .To
-
                 case "step":
                     keyword = .Step
-
                 case "return":
                     keyword = .Return
-
                 case "true":
                     keyword = .True
-
                 case "false":
                     keyword = .False
-
                 case "null":
                     keyword = .Null
-
                 case "object":
                     keyword = .Object
-
                 case "array":
                     keyword = .Array
-
                 case "int":
                     keyword = .Int
-
                 case "float":
                     keyword = .Float
-
                 case "string":
                     keyword = .String
-
                 case "bool":
                     keyword = .Bool
-
                 case "type":
                     keyword = .Type
                 }

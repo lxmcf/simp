@@ -503,7 +503,8 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                 return _parse_statement(state, parser)
             } else {
                 for parser.position < len(parser.tokens) {
-                    if _peek_ahead(parser).type == .Newline {
+                    next_tok := _peek_ahead(parser).type
+                    if next_tok == .Newline || next_tok == .Semicolon {
                         break
                     }
                     _advance(parser)
@@ -788,7 +789,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
 
                 next_token_type := _peek_ahead(parser).type
-                if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Comma {
+                if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Comma || next_token_type == .Semicolon {
                     _advance(parser)
                     continue
                 }
@@ -812,7 +813,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 }
 
                 next_token_type := _peek_ahead(parser).type
-                if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Comma {
+                if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Comma || next_token_type == .Semicolon {
                     _advance(parser)
                     continue
                 }
@@ -1285,7 +1286,7 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
         }
 
         next_token_type := _peek_ahead(parser).type
-        if next_token_type == .Newline || next_token_type == .Colon {
+        if next_token_type == .Newline || next_token_type == .Colon || next_token_type == .Semicolon {
             _advance(parser)
             continue
         }
