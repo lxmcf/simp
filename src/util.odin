@@ -285,9 +285,6 @@ _get_default_token_text :: proc(token_type: Token_Type, token_keyword: Token_Key
     case .Ellipsis:
         return "..."
 
-    case .Semicolon:
-        return ";"
-
     case .EOF:
         return "EOF"
     }

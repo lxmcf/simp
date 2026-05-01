@@ -75,9 +75,11 @@ const bar = "Hello simp"
 Variables defined by `let` are always mutable and those defined by `const` are immutable, a constant will work similar to a JavaScript constant where you can declare and array or object as const; however you can still modify the stored data as shown:
 
 ```lua
+--- Arrays ---
 const arr = array { 7, 0, 0, 8, 5 }
 array[0] = 8
 
+--- Objects ---
 const obj = object { my_name_is = "what?" }
 obj.my_name_is = "who?"
 ```
@@ -96,8 +98,8 @@ var = true
 However, sometimes you will want to ensure a variable is off a specific type, this is where casting comes into play:
 
 ```lua
-let var_integer = "1337"::int;
-let var_string = 3.14::string;
+let var_integer = "1337"::int
+let var_string = 3.14::string
 ```
 
 Type casting also has some powerful functionality when it comes to the `type` type and complex types like arrays and objects.
@@ -105,6 +107,7 @@ Type casting also has some powerful functionality when it comes to the `type` ty
 If you cast anything to a type, it will return it's type as a value an casting a complex type to a string will return a JSON formatted string:
 
 ```lua
+--- Simple type casting ---
 let my_type = type
 
 my_type = 1::type
@@ -113,6 +116,7 @@ put "I am an '" + my_type + "'\n"
 my_type = "When in doubt, use brute force."::type
 put "I am now a '" + my_type + "'\n"
 
+--- JSON String casting ---
 const arr = array { "F", "E", "E", "F" }
 put arr::string + "\n"
 

@@ -13,7 +13,7 @@ contexts:
     - include: invalid-numbers
     - include: numbers
     - include: type-casting
-    - include: directives
+    - include: statements
     - include: keywords
     - include: types
     - include: constants
@@ -29,6 +29,15 @@ contexts:
 
   # --- COMMENTS ---
   comments:
+    # Multi-line comments (--- content ---)
+    - match: "---"
+      scope: punctuation.definition.comment.begin.simp
+      push:
+        - meta_scope: comment.block.simp
+        - match: "---"
+          scope: punctuation.definition.comment.end.simp
+          pop: true
+    # Single-line comments (// content)
     - match: //
       scope: punctuation.definition.comment.simp
       push:
@@ -71,14 +80,13 @@ contexts:
         1: keyword.operator.type-cast.simp
         2: support.type.simp
 
-  # --- DIRECTIVES ---
-  directives:
+  # --- STATEMENTS ---
+  statements:
     - match: '\b(import|put|pull|sleep|delete|label|goto|new|exit)\b'
-      scope: keyword.other.directive.simp
+      scope: keyword.other.statement.simp
 
   # --- KEYWORDS ---
   keywords:
-    # Removed 'end', kept 'then' for your 1-line if statements
     - match: '\b(while|for|foreach|in|break|continue|then|else|if|to|step|return)\b'
       scope: keyword.control.simp
     - match: '\b(and|or|not)\b'
@@ -111,6 +119,8 @@ contexts:
   punctuation:
     - match: '\.\.\.'
       scope: keyword.operator.variadic.simp
+    - match: ";"
+      scope: punctuation.terminator.statement.simp
     - match: ","
       scope: punctuation.separator.comma.simp
     - match: ":(?!:)"
@@ -136,7 +146,7 @@ contexts:
       captures:
         1: variable.function.simp
 
-  # --- CONTEXT GROUPS (BRACKET, PAREN & BRACE TRACKING) ---
+  # --- CONTEXT GROUPS ---
   arrays:
     - match: '\['
       scope: punctuation.section.brackets.begin.simp
@@ -168,6 +178,5 @@ contexts:
         - include: main
 
   invalid-brackets:
-    # Added \} to track stray closing curly braces
     - match: '\]|\)|\}'
       scope: invalid.illegal.stray-bracket.simp

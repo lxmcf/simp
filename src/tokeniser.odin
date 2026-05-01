@@ -44,13 +44,12 @@ Token_Type :: distinct enum {
     SlashEquals,
     PercentEquals,
     Ellipsis,
-    Semicolon,
 }
 
 Token_Keyword :: distinct enum {
     None,
 
-    // BUILTIN DIRECTIVES
+    // STATEMENTS
     Import,
     Put,
     Pull,
@@ -60,11 +59,11 @@ Token_Keyword :: distinct enum {
     Goto,
     New,
     Exit,
+    Let,
+    Const,
+    Return,
 
-    // KEYWORDS
-    And,
-    Or,
-    Not,
+    // CONTROL FLOW
     While,
     For,
     Foreach,
@@ -72,27 +71,29 @@ Token_Keyword :: distinct enum {
     Break,
     Continue,
     Function,
-    Else,
     If,
-    Let,
-    Const,
+    Else,
     Then,
     To,
     Step,
-    Return,
+
+    // LITERALS / BOOLEAN
+    And,
+    Or,
+    Not,
     True,
     False,
     Null,
+
+    // TYPES / CONSTRUCTORS
     Object,
     Array,
-    Ellipsis,
-
-    // TYPES
     Int,
     Float,
     String,
     Bool,
     Type,
+    Ellipsis,
 }
 
 Token :: distinct struct {
@@ -204,7 +205,7 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
         character := script[char_index]
 
         switch character {
-        case ' ', '\t':
+        case ' ', '\t', ';':
             char_index += 1
 
         case '\r':
@@ -221,10 +222,6 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
             append(&tokens, Token{type = .Newline, keyword = .None, text = "\n", line = line_number})
             char_index += 1
             line_number += 1
-
-        case ';':
-            append(&tokens, Token{type = .Semicolon, keyword = .None, text = ";", line = line_number})
-            char_index += 1
 
         case '+':
             if char_index + 1 < len(script) && script[char_index + 1] == '=' {

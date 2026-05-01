@@ -12,7 +12,7 @@ SIMP is designed to be as simple as possible, to the point there are 0 functions
 
 ```lua
 function print (...) {
-	foreach , arg in ... {
+	foreach idx, arg in ... {
 		if idx > 0 {
 			put " "
 		}
