@@ -87,7 +87,7 @@ reload_script :: proc(script: ^Script) {
 
     file_data, read_err := os.read_entire_file(script.path, context.temp_allocator)
     if read_err == nil {
-        simp.state_load_source(&script.state, string(file_data), script.path)
+        simp.state_load_string(&script.state, string(file_data), script.path)
         fmt.printfln("Successfully loaded mod: %s", script.path)
     } else {
         fmt.printfln("Failed to read mod file: %s", script.path)

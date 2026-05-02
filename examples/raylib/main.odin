@@ -25,24 +25,20 @@ fn_is_key_down :: proc(state: ^simp.State, args: []simp.Value) -> simp.Value {
     }
 
     key := simp.value_to_string(args[0])
-
-    if key == "SPACE" {
+    switch key {
+    case "SPACE":
         return rl.IsKeyDown(.SPACE)
-    }
 
-    if key == "UP" {
+    case "UP":
         return rl.IsKeyDown(.UP)
-    }
 
-    if key == "DOWN" {
+    case "DOWN":
         return rl.IsKeyDown(.DOWN)
-    }
 
-    if key == "LEFT" {
+    case "LEFT":
         return rl.IsKeyDown(.LEFT)
-    }
 
-    if key == "RIGHT" {
+    case "RIGHT":
         return rl.IsKeyDown(.RIGHT)
     }
 

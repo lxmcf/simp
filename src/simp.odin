@@ -176,10 +176,10 @@ state_destroy :: proc(state: ^State) {
 }
 
 // -----------------------------------------------------------------------------
-// Source Loading
+// Source Loading & Execution
 // -----------------------------------------------------------------------------
 
-state_load_source :: proc(state: ^State, script_data: string, filename: string) -> bool {
+state_load_string :: proc(state: ^State, script_data: string, filename: string) -> bool {
     if state.tokens != nil {
         delete(state.tokens)
     }
@@ -240,72 +240,22 @@ state_load_file :: proc(state: ^State, filename: string) -> bool {
     slash_index := strings.last_index_any(filename, filepath.SEPARATOR_CHARS)
     name := filepath.stem(filename[slash_index + 1:])
 
-    return state_load_source(state, string(file_data), name)
+    return state_load_string(state, string(file_data), name)
 }
 
-state_append_source :: proc(state: ^State, script_data: string, filename: string) -> bool {
-    visited_files := make(map[string]bool, 16, context.temp_allocator)
-    temporary_tokens, tokenisation_success := _tokenise_and_resolve(state, script_data, filename, &visited_files)
+state_execute :: proc(state: ^State) {
+    for state_step(state, 0.016, 10_000_000) {
+        if state.is_sleeping && state.sleep_timer > 0 {
+            sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
+            time.sleep(sleep_duration)
 
-    if !tokenisation_success {
-        state.should_close = false
-        return false
+            state.sleep_timer = 0
+            state.is_sleeping = false
+        }
     }
-
-    if state.tokens == nil {
-        state.tokens = make([dynamic]Token)
-    }
-
-    old_total_tokens := len(state.tokens)
-
-    // Append the new tokens
-    for token in temporary_tokens {
-        append(&state.tokens, token)
-    }
-
-    // Recompute the entire jump table for the whole state to ensure
-    // all blocks (even those spanning REPL entries) are linked.
-    if state.jump_table != nil {
-        delete(state.jump_table)
-    }
-    state.jump_table = _compute_tables(state.tokens[:], context.allocator)
-
-    // Update literals for the whole token set
-    if state.literals != nil {
-        delete(state.literals)
-    }
-    state.literals = make([]Value, len(state.tokens))
-    _compute_literals(state, 0)
-
-    state.position = old_total_tokens
-    state.is_sleeping = false
-    state.sleep_timer = 0
-    state.should_close = false
-
-    return true
 }
 
-// -----------------------------------------------------------------------------
-// Execution
-// -----------------------------------------------------------------------------
-
-state_run_source :: proc(state: ^State, script: string, filename: string) {
-    if !state_load_source(state, script, filename) {
-        return
-    }
-
-    _execute_until_completion(state)
-}
-
-state_run_file :: proc(state: ^State, filename: string) {
-    if !state_load_file(state, filename) {
-        return
-    }
-
-    _execute_until_completion(state)
-}
-
-state_run_snippet :: proc(state: ^State, script: string, filename: string = "eval") {
+state_evaluate_string :: proc(state: ^State, script: string, filename: string) -> bool {
     old_position := state.position
     old_is_sleeping := state.is_sleeping
     old_sleep_timer := state.sleep_timer
@@ -323,24 +273,43 @@ state_run_snippet :: proc(state: ^State, script: string, filename: string = "eva
         state.should_close = old_should_close
     }
 
-    if !state_append_source(state, script, filename) {
-        return
+    visited_files := make(map[string]bool, 16, context.temp_allocator)
+    temporary_tokens, tokenisation_success := _tokenise_and_resolve(state, script, filename, &visited_files)
+
+    if !tokenisation_success {
+        state.should_close = false
+        return false
     }
 
-    _execute_until_completion(state)
-}
-
-@(private = "file")
-_execute_until_completion :: proc(state: ^State) {
-    for state_step(state, 0.016, 10_000_000) {
-        if state.is_sleeping && state.sleep_timer > 0 {
-            sleep_duration := time.Duration(state.sleep_timer * f64(time.Millisecond))
-            time.sleep(sleep_duration)
-
-            state.sleep_timer = 0
-            state.is_sleeping = false
-        }
+    if state.tokens == nil {
+        state.tokens = make([dynamic]Token)
     }
+
+    old_total_tokens := len(state.tokens)
+
+    for token in temporary_tokens {
+        append(&state.tokens, token)
+    }
+
+    if state.jump_table != nil {
+        delete(state.jump_table)
+    }
+    state.jump_table = _compute_tables(state.tokens[:], context.allocator)
+
+    if state.literals != nil {
+        delete(state.literals)
+    }
+    state.literals = make([]Value, len(state.tokens))
+    _compute_literals(state, 0)
+
+    state.position = old_total_tokens
+    state.is_sleeping = false
+    state.sleep_timer = 0
+    state.should_close = false
+
+    state_execute(state)
+
+    return true
 }
 
 // -----------------------------------------------------------------------------

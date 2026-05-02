@@ -2,6 +2,8 @@ build/
 out/
 simpc/
 
+src/simp_test.odin
+
 *.sbin
 out.txt
 test.smp

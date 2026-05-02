@@ -40,6 +40,9 @@ Config :: struct {
     theme:        Theme,
 }
 
+// Used to expose to commands
+global_config: ^Config
+
 print_usage :: proc() {
     command := filepath.base(os.args[0])
 
@@ -54,61 +57,6 @@ print_usage :: proc() {
     fmt.println("      --no-std         Disables loading the standard library for evaluation")
     fmt.println("  -m  --minimal        Disables the builtin REPL functions (")
     fmt.println("  -o, --out <file>     Specify output file for compilation (default: <script>.sbin)")
-}
-
-cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
-    fmt.println("\n--- Global Variables ---")
-    global_scope := state.scopes[0]
-
-    if len(global_scope) == 0 {
-        fmt.println("[ Empty ]")
-    } else {
-        for name, value_slot in global_scope {
-            fmt.printfln(" (%s) %s = %s", value_slot.is_const ? "C" : "M", name, simp.value_to_string(value_slot.value))
-        }
-    }
-}
-
-cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
-    fmt.print(ANSI_GREEN_BOLD)
-    fmt.println("\n--- Native Functions ---")
-    fmt.print(ANSI_RESET)
-
-    if len(state.native_procs) == 0 {
-        fmt.println("[ Empty ]")
-    } else {
-        for key in state.native_procs {
-            fmt.print(ANSI_YELLOW)
-            fmt.printfln(" %s", key)
-            fmt.print(ANSI_RESET)
-        }
-    }
-
-    fmt.print(ANSI_GREEN_BOLD)
-    fmt.println("\n--- User Functions ---")
-    fmt.print(ANSI_RESET)
-
-    if len(state.functions) == 0 {
-        fmt.println("[ Empty ]")
-    } else {
-        for key, func in state.functions {
-            fmt.print(ANSI_YELLOW)
-            fmt.printf(" %s ", key)
-            fmt.print(ANSI_RESET)
-
-            fmt.printf("(")
-
-            for arg, idx in func.arguments {
-                if idx > 0 {
-                    fmt.print(", ")
-                }
-
-                fmt.print(arg)
-            }
-
-            fmt.println(")")
-        }
-    }
 }
 
 parse_arguments :: proc() -> (config: Config, should_exit: bool) {
@@ -214,6 +162,8 @@ main :: proc() {
             return
         }
 
+        global_config = &config
+
         state: simp.State
         simp.state_init(&state)
         defer {
@@ -222,8 +172,7 @@ main :: proc() {
         }
 
         if !config.minimal_repl {
-            simp.bind_native_proc(&state, "vars", cmd_vars)
-            simp.bind_native_proc(&state, "help", cmd_help)
+            register_native_procs(&state)
         }
 
         if !config.no_std {
@@ -240,7 +189,9 @@ main :: proc() {
                 os.exit(1)
             }
 
-            simp.state_run_file(&state, config.input_file)
+            if simp.state_load_file(&state, config.input_file) {
+                simp.state_execute(&state)
+            }
 
         case .Compile_Script:
             out := config.out_file
@@ -367,7 +318,7 @@ run_repl :: proc(state: ^simp.State, theme: Theme) {
         strings.write_string(&script_accumulator, "\n")
 
         if block_depth == 0 && !is_in_multiline_comment {
-            simp.state_run_snippet(state, strings.to_string(script_accumulator), os.args[0])
+            simp.state_evaluate_string(state, strings.to_string(script_accumulator), os.args[0])
 
             if state.is_exiting {
                 break
