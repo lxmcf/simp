@@ -1,3 +1,5 @@
+#+build linux
+
 // TODO: Move away from libc
 
 package main

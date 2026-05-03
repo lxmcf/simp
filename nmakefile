@@ -1,12 +1,12 @@
 CC = odin
-BUILD = DEBUG
+CONFIG = DEBUG
 
-C_FLAGS = -vet -min-link-libs -strict-style -disallow-do -subsystem:windows
+CFLAGS = -vet -min-link-libs -strict-style -disallow-do
 OPT = none
 
-!IF "$(BUILD)" == "DEBUG"
-C_FLAGS = $(C_FLAGS) -debug -microarch:native
-!ELSEIF "$(BUILD)" == "RELEASE"
+!IF "$(CONFIG)" == "DEBUG"
+CFLAGS = $(CFLAGS) -debug -microarch:native
+!ELSEIF "$(CONFIG)" == "RELEASE"
 OPT = speed
 !ENDIF
 
@@ -14,7 +14,7 @@ all: build
 
 build:
     @if not exist build mkdir build
-    $(CC) build src/ -out:build/simp.exe $(C_FLAGS) -o:$(OPT)
+    $(CC) build cli/ -out:build/simp.exe $(CFLAGS) -o:$(OPT)
 
 run: build
     build\simp.exe
