@@ -1,5 +1,7 @@
 #+build windows
 
+// NOTE: This is clanker generated, idk windows man
+
 package main
 
 import "core:sys/windows"

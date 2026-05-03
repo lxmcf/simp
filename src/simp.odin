@@ -13,7 +13,7 @@ import "core:time"
 // Core types
 // -----------------------------------------------------------------------------
 
-DEFAULT_VALUE :: Null_Value{}
+DEFAULT_RETURN_VALUE :: Null_Value{}
 
 Object :: map[string]Value
 Array :: [dynamic]Value
@@ -268,6 +268,7 @@ state_evaluate_string :: proc(state: ^State, script: string, filename: string) -
         } else {
             state.position = old_position
         }
+
         state.is_sleeping = old_is_sleeping
         state.sleep_timer = old_sleep_timer
         state.should_close = old_should_close
@@ -310,6 +311,42 @@ state_evaluate_string :: proc(state: ^State, script: string, filename: string) -
     state_execute(state)
 
     return true
+}
+
+// -----------------------------------------------------------------------------
+// State Calls
+// -----------------------------------------------------------------------------
+call_user_function :: proc(state: ^State, name: string, arguments: []Value = nil) -> (Value, bool) {
+    if name not_in state.functions {
+        return DEFAULT_RETURN_VALUE, false
+    }
+
+    parser := Parser {
+        tokens   = state.tokens[:],
+        position = state.position,
+    }
+
+    old_is_returning := state.is_returning
+    old_return_value := state.return_value
+
+    result := _call_user_function(state, &parser, name, arguments)
+
+    state.is_returning = old_is_returning
+    state.return_value = old_return_value
+
+    return result, true
+}
+
+get_user_variable :: proc(state: ^State, name: string) -> (Value, bool) #optional_ok {
+    if _has_var(state, name) {
+        return _get_var(state, name), true
+    }
+
+    return DEFAULT_RETURN_VALUE, false
+}
+
+set_user_variable :: proc(state: ^State, name: string, value: Value) {
+    _set_var(state, name, value)
 }
 
 // -----------------------------------------------------------------------------

@@ -41,16 +41,14 @@ SIMP has 2 forms of functions, native and user functions. A native function is a
 
 ```lua
 function say_hello () {
-    put "Hello SIMP!\n"
+    putln "Hello SIMP!"
 }
 
 function sum (...) {
     let total = 0.0
 
-    foreach _, number in ... {
-        if number::type != int && number::type != float {
-            continue
-        }
+    foreach (_, number in ...) {
+        if (number::type not in (int, float)) then continue
 
         total += number
     }
@@ -59,7 +57,7 @@ function sum (...) {
 }
 ```
 
-There are a lot of core concepts shown off in the `sum` user function here, however we will covers these later on.
+There are a lot of core concepts shown off in the `sum` user function here, however we will cover these later on.
 
 ### Variables
 
@@ -111,19 +109,19 @@ If you cast anything to a type, it will return it's type as a value an casting a
 let my_type = type
 
 my_type = 1::type
-put "I am an '" + my_type + "'\n"
+putln "I am an '" + my_type
 
 my_type = "When in doubt, use brute force."::type
-put "I am now a '" + my_type + "'\n"
+putln "I am now a '" + my_type
 
 --- JSON String casting ---
 const arr = array { "F", "E", "E", "F" }
-put arr::string + "\n"
+putln arr::string
 
 const obj = object {
     sanity = "lol",
     are_you_actually_reading = false
 }
 
-put obj::string + "\n"
+putln obj::string
 ```

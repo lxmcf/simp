@@ -9,7 +9,6 @@ load_strings_library :: proc(state: ^simp.State) {
     simp.bind_native_proc(state, "upper", fn_upper)
     simp.bind_native_proc(state, "lower", fn_lower)
     simp.bind_native_proc(state, "trim", fn_trim)
-    simp.bind_native_proc(state, "contains", fn_contains)
 }
 
 // sub(text, start, length) -> "llo"
@@ -37,7 +36,7 @@ fn_sub :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         }
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // replace(text, old_str, new_str) -> text with replaced values
@@ -53,7 +52,7 @@ fn_replace :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return replaced_value
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // upper(text)
@@ -64,7 +63,7 @@ fn_upper :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return strings.to_upper(target_string, context.temp_allocator)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // lower(text)
@@ -73,7 +72,7 @@ fn_lower :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
     if target_string, is_string := simp.pop_string(&args); is_string {
         return strings.to_lower(target_string, context.temp_allocator)
     }
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // trim(text) -> Removes leading and trailing whitespace
@@ -84,19 +83,5 @@ fn_trim :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return strings.trim_space(target_string)
     }
 
-    return simp.DEFAULT_VALUE
-}
-
-// contains(text, search_str) -> true if found
-fn_contains :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
-    args := arguments
-
-    target_string, is_target_string := simp.pop_string(&args)
-    search_string, is_search_string := simp.pop_string(&args)
-
-    if is_target_string && is_search_string {
-        return strings.contains(target_string, search_string)
-    }
-
-    return false
+    return simp.DEFAULT_RETURN_VALUE
 }

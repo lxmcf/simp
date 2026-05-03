@@ -19,5 +19,8 @@ build:
 run: build
     build\simp.exe
 
+test:
+    $(CC) test tests
+
 clean:
     @if exist build rmdir /s /q build

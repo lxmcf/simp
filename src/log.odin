@@ -12,6 +12,7 @@ Log_Level :: distinct enum u8 {
     Fatal,
 }
 
+@(private = "package")
 default_log_proc :: proc(level: Log_Level, message: string, line: int = -1) {
     level_prefix := ""
     #partial switch level {

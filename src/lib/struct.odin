@@ -48,5 +48,5 @@ fn_pop :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         }
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }

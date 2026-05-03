@@ -19,8 +19,10 @@ fn_print :: proc(state: ^simp.State, arguments: []simp.Value) {
         if index > 0 {
             fmt.print(" ")
         }
+
         fmt.print(simp.value_to_string(argument))
     }
+
     fmt.println()
 }
 
@@ -29,13 +31,12 @@ fn_read_file :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value 
     args := arguments
 
     if path, ok := simp.pop_string(&args); ok {
-        file_data, read_error := os.read_entire_file(path, context.temp_allocator)
-        if read_error == nil {
+        if file_data, read_error := os.read_entire_file(path, context.temp_allocator); read_error == nil {
             return simp.intern_string(state, string(file_data))
         }
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // write_file("path/to/file.txt", "File contents") -> bool
@@ -46,7 +47,7 @@ fn_write_file :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value
     content, content_ok := simp.pop_string(&args)
 
     if path_ok && content_ok {
-        write_error := os.write_entire_file(path, transmute([]u8)content)
+        write_error := os.write_entire_file(path, content)
         return write_error == nil
     }
 
@@ -61,10 +62,11 @@ fn_append_file :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Valu
     content, content_ok := simp.pop_string(&args)
 
     if path_ok && content_ok {
-        file_handle, err := os.open(path, os.O_APPEND | os.O_CREATE | os.O_WRONLY)
-        if err == nil {
+        if file_handle, err := os.open(path, os.O_APPEND | os.O_CREATE | os.O_WRONLY); err == nil {
             defer os.close(file_handle)
+
             _, write_error := os.write_string(file_handle, content)
+
             return write_error == nil
         }
     }

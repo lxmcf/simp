@@ -11,6 +11,10 @@ Native_Proc :: union {
     Native_Proc_Return,
 }
 
+// -----------------------------------------------------------------------------
+// State Binding
+// -----------------------------------------------------------------------------
+
 bind_native_proc :: proc(state: ^State, name: string, function: Native_Proc) {
     state.native_procs[name] = function
 }
@@ -33,174 +37,105 @@ bind_variable :: proc(state: ^State, name: string, value: Value, is_const := fal
     return false
 }
 
-pop_int :: proc(arguments: ^[]Value) -> (int, bool) {
-    if len(arguments^) == 0 {
-        return 0, false
+// -----------------------------------------------------------------------------
+// Argument Popping
+// -----------------------------------------------------------------------------
+
+pop_int :: proc(arguments: ^[]Value, default: int = 0) -> (int, bool) {
+    if len(arguments^) > 0 {
+        if actual_value, ok := value_as_int(arguments^[0]); ok {
+            arguments^ = arguments^[1:]
+            return actual_value, true
+        }
     }
 
-    if value, success := value_as_int(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return value, true
-    }
-
-    return 0, false
+    return default, false
 }
 
-pop_f64 :: proc(arguments: ^[]Value) -> (f64, bool) {
-    if len(arguments^) == 0 {
-        return 0.0, false
+pop_f64 :: proc(arguments: ^[]Value, default: f64 = 0.0) -> (f64, bool) {
+    if len(arguments^) > 0 {
+        if actual_value, ok := value_as_f64(arguments^[0]); ok {
+            arguments^ = arguments^[1:]
+            return actual_value, true
+        }
     }
 
-    if value, success := value_as_f64(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return value, true
-    }
-
-    return 0.0, false
+    return default, false
 }
 
-pop_i32 :: proc(arguments: ^[]Value) -> (i32, bool) {
-    if len(arguments^) == 0 {
-        return 0, false
+pop_i32 :: proc(arguments: ^[]Value, default: i32 = 0) -> (i32, bool) {
+    if len(arguments^) > 0 {
+        if actual_value, ok := value_as_int(arguments^[0]); ok {
+            arguments^ = arguments^[1:]
+            return i32(actual_value), true
+        }
     }
 
-    if value, success := value_as_int(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return i32(value), true
-    }
-
-    return 0, false
+    return default, false
 }
 
-pop_f32 :: proc(arguments: ^[]Value) -> (f32, bool) {
-    if len(arguments^) == 0 {
-        return 0.0, false
+pop_f32 :: proc(arguments: ^[]Value, default: f32 = 0.0) -> (f32, bool) {
+    if len(arguments^) > 0 {
+        if actual_value, ok := value_as_f64(arguments^[0]); ok {
+            arguments^ = arguments^[1:]
+            return f32(actual_value), true
+        }
     }
 
-    if value, success := value_as_f64(arguments^[0]); success {
-        arguments^ = arguments^[1:]
-        return f32(value), true
-    }
-
-    return 0.0, false
+    return default, false
 }
 
-pop_string :: proc(arguments: ^[]Value) -> (string, bool) {
-    if len(arguments^) == 0 {
-        return "", false
+@(private = "file")
+_pop_actual :: #force_inline proc(arguments: ^[]Value, default: $T) -> (T, bool) {
+    if len(arguments^) > 0 {
+        if actual_value, ok := arguments^[0].(T); ok {
+            arguments^ = arguments^[1:]
+            return actual_value, true
+        }
     }
 
-    #partial switch actual_value in arguments^[0] {
-    case string:
-        arguments^ = arguments^[1:]
-        return actual_value, true
-    }
-
-    return "", false
+    return default, false
 }
 
-pop_bool :: proc(arguments: ^[]Value) -> (bool, bool) {
-    if len(arguments^) == 0 {
-        return false, false
-    }
-
-    #partial switch actual_value in arguments^[0] {
-    case bool:
-        arguments^ = arguments^[1:]
-        return actual_value, true
-    }
-
-    return false, false
+pop_string :: proc(arguments: ^[]Value, default: string = "") -> (string, bool) {
+    return _pop_actual(arguments, default)
 }
 
-pop_object :: proc(arguments: ^[]Value) -> (^Object, bool) {
-    if len(arguments^) == 0 {
-        return nil, false
-    }
-
-    #partial switch actual_value in arguments^[0] {
-    case ^Object:
-        arguments^ = arguments^[1:]
-        return actual_value, true
-    }
-
-    return nil, false
+pop_bool :: proc(arguments: ^[]Value, default: bool = false) -> (bool, bool) {
+    return _pop_actual(arguments, default)
 }
 
-pop_array :: proc(arguments: ^[]Value) -> (^Array, bool) {
-    if len(arguments^) == 0 {
-        return nil, false
-    }
-
-    #partial switch actual_value in arguments^[0] {
-    case ^Array:
-        arguments^ = arguments^[1:]
-        return actual_value, true
-    }
-
-    return nil, false
+pop_object :: proc(arguments: ^[]Value, default: ^Object = nil) -> (^Object, bool) {
+    return _pop_actual(arguments, default)
 }
 
-pop_rawptr :: proc(arguments: ^[]Value) -> (rawptr, bool) {
-    if len(arguments^) == 0 {
-        return nil, false
-    }
-
-    #partial switch actual_value in arguments^[0] {
-    case rawptr:
-        arguments^ = arguments^[1:]
-        return actual_value, true
-    }
-
-    return nil, false
+pop_array :: proc(arguments: ^[]Value, default: ^Array = nil) -> (^Array, bool) {
+    return _pop_actual(arguments, default)
 }
+
+pop_rawptr :: proc(arguments: ^[]Value, default: rawptr = nil) -> (rawptr, bool) {
+    return _pop_actual(arguments, default)
+}
+
+// -----------------------------------------------------------------------------
+// Values
+// -----------------------------------------------------------------------------
 
 values_are_equal :: proc(left: Value, right: Value) -> bool {
-    left_number, is_left_valid := value_as_f64(left)
-    right_number, is_right_valid := value_as_f64(right)
+    left_num, left_valid := value_as_f64(left)
+    right_num, right_valid := value_as_f64(right)
 
-    if is_left_valid && is_right_valid {
-        return left_number == right_number
+    if left_valid && right_valid {
+        return left_num == right_num
     }
 
-    // Allow for 'type' checking
-    if left_type, is_left_type := left.(Type_Value); is_left_type {
-        #partial switch _ in right {
-        case Null_Value:
-            return left_type == .Null
-        case int:
-            return left_type == .Int
-        case f64:
-            return left_type == .Float
-        case string:
-            return left_type == .String
-        case bool:
-            return left_type == .Bool
-        case ^Object:
-            return left_type == .Object
-        case ^Array:
-            return left_type == .Array
-        case Type_Value:
-            return left_type == right.(Type_Value)
-        }
-    }
-    if right_type, is_right_type := right.(Type_Value); is_right_type {
-        #partial switch _ in left {
-        case Null_Value:
-            return right_type == .Null
-        case int:
-            return right_type == .Int
-        case f64:
-            return right_type == .Float
-        case string:
-            return right_type == .String
-        case bool:
-            return right_type == .Bool
-        case ^Object:
-            return right_type == .Object
-        case ^Array:
-            return right_type == .Array
-        }
+    left_type, left_is_type := left.(Type_Value)
+    right_type, right_is_type := right.(Type_Value)
+
+    if left_is_type && !right_is_type {
+        return left_type == _get_value_type(right)
+    } else if right_is_type && !left_is_type {
+        return right_type == _get_value_type(left)
     }
 
     return left == right
@@ -208,7 +143,23 @@ values_are_equal :: proc(left: Value, right: Value) -> bool {
 
 value_to_string :: proc(value: Value) -> string {
     #partial switch raw_value in value {
-    case f64:
+
+    case string:
+        return raw_value
+
+    case ^string:
+        return raw_value^
+
+    case bool:
+        return raw_value ? "true" : "false"
+
+    case ^bool:
+        return raw_value^ ? "true" : "false"
+
+    case Null_Value:
+        return "null"
+
+    case f64, int:
         return fmt.tprintf("%v", raw_value)
 
     case ^f64:
@@ -217,20 +168,42 @@ value_to_string :: proc(value: Value) -> string {
     case ^f32:
         return fmt.tprintf("%v", raw_value^)
 
-    case int:
-        return fmt.tprintf("%v", raw_value)
-
     case ^int:
         return fmt.tprintf("%v", raw_value^)
 
     case ^i32:
         return fmt.tprintf("%v", raw_value^)
 
-    case string:
-        return raw_value
+    case Type_Value:
+        @(static) type_names := [Type_Value]string {
+            .Int      = "int",
+            .Float    = "float",
+            .String   = "string",
+            .Bool     = "bool",
+            .Object   = "object",
+            .Array    = "array",
+            .Pointer  = "pointer",
+            .Null     = "null",
+            .Function = "function",
+            .Type     = "type",
+        }
 
-    case bool:
-        return raw_value ? "true" : "false"
+        return type_names[raw_value]
+
+    case ^Array:
+        builder := strings.builder_make(context.temp_allocator)
+        strings.write_string(&builder, "[")
+
+        for val, index in raw_value^ {
+            if index > 0 {
+                strings.write_string(&builder, ", ")
+            }
+
+            _write_json_value(&builder, val)
+        }
+
+        strings.write_string(&builder, "]")
+        return strings.to_string(builder)
 
     case ^Object:
         builder := strings.builder_make(context.temp_allocator)
@@ -244,69 +217,12 @@ value_to_string :: proc(value: Value) -> string {
 
             is_first = false
 
-            strings.write_string(&builder, fmt.tprintf("%q: ", key))
+            fmt.sbprintf(&builder, "%q: ", key)
             _write_json_value(&builder, val)
         }
 
         strings.write_string(&builder, "}")
         return strings.to_string(builder)
-
-    case ^Array:
-        builder := strings.builder_make(context.temp_allocator)
-        strings.write_string(&builder, "[")
-
-        for index := 0; index < len(raw_value^); index += 1 {
-            if index > 0 {
-                strings.write_string(&builder, ", ")
-            }
-
-            _write_json_value(&builder, raw_value^[index])
-        }
-
-        strings.write_string(&builder, "]")
-        return strings.to_string(builder)
-
-    case Null_Value:
-        return "null"
-
-    case ^string:
-        return raw_value^
-
-    case ^bool:
-        return raw_value^ ? "true" : "false"
-
-    case Type_Value:
-        switch raw_value {
-        case .Int:
-            return "int"
-
-        case .Float:
-            return "float"
-
-        case .String:
-            return "string"
-
-        case .Bool:
-            return "bool"
-
-        case .Object:
-            return "object"
-
-        case .Array:
-            return "array"
-
-        case .Pointer:
-            return "pointer"
-
-        case .Null:
-            return "null"
-
-        case .Function:
-            return "function"
-
-        case .Type:
-            return "type"
-        }
     }
 
     return ""

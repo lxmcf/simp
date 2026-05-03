@@ -18,7 +18,7 @@ cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
 }
 
 cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
-    fmt.print(ANSI_GREEN_BOLD)
+    fmt.print(global_config.theme.comment)
     fmt.println("\n--- Native Functions ---")
     fmt.print(ANSI_RESET)
 
@@ -26,13 +26,13 @@ cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
         fmt.println("[ Empty ]")
     } else {
         for key in state.native_procs {
-            fmt.print(ANSI_YELLOW)
+            fmt.print(global_config.theme.function)
             fmt.printfln(" %s", key)
             fmt.print(ANSI_RESET)
         }
     }
 
-    fmt.print(ANSI_GREEN_BOLD)
+    fmt.print(global_config.theme.comment)
     fmt.println("\n--- User Functions ---")
     fmt.print(ANSI_RESET)
 
@@ -40,7 +40,7 @@ cmd_help :: proc(state: ^simp.State, arguments: []simp.Value) {
         fmt.println("[ Empty ]")
     } else {
         for key, func in state.functions {
-            fmt.print(ANSI_YELLOW)
+            fmt.print(global_config.theme.function)
             fmt.printf(" %s ", key)
             fmt.print(ANSI_RESET)
 
@@ -65,13 +65,19 @@ cmd_theme :: proc(state: ^simp.State, arguments: []simp.Value) {
     if theme_name, ok := simp.pop_string(&args); ok {
         switch theme_name {
         case "solarized":
-            global_config.theme = SOLARIZED_THEME
+            global_config.theme = THEME_SOLARIZED
+
         case "dracula":
-            global_config.theme = DRACULA_THEME
+            global_config.theme = THEME_DRACULA
+
         case "monokai":
-            global_config.theme = MONOKAI_THEME
+            global_config.theme = THEME_MONOKAI
+
         case "nord":
-            global_config.theme = NORD_THEME
+            global_config.theme = THEME_NORD
+
+        case "vs":
+            global_config.theme = THEME_VISUAL_STUDIO
         }
     }
 }

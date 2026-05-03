@@ -28,7 +28,7 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
 
             for index := 0; index < len(left_array_reference^); index += 1 {
                 element_result, success := _evaluate_math(state, operation, left_array_reference^[index], right_array_reference^[index])
-                final_value: Value = success ? element_result : DEFAULT_VALUE
+                final_value: Value = success ? element_result : DEFAULT_RETURN_VALUE
 
                 if is_compound {
                     result_array^[index] = final_value
@@ -40,7 +40,7 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
             return result_array, true
         }
 
-        return DEFAULT_VALUE, false
+        return DEFAULT_RETURN_VALUE, false
     }
 
     if is_left_array && is_right_number {
@@ -48,7 +48,7 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
 
         for index := 0; index < len(left_array_reference^); index += 1 {
             element_result, success := _evaluate_math(state, operation, left_array_reference^[index], right)
-            final_value: Value = success ? element_result : DEFAULT_VALUE
+            final_value: Value = success ? element_result : DEFAULT_RETURN_VALUE
 
             if is_compound {
                 result_array^[index] = final_value
@@ -69,7 +69,7 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
             if success {
                 append(new_array, element_result)
             } else {
-                append(new_array, DEFAULT_VALUE)
+                append(new_array, DEFAULT_RETURN_VALUE)
             }
         }
 
@@ -103,7 +103,7 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
     }
 
     if !(left_is_float || left_is_integer) || !(right_is_float || right_is_integer) {
-        return DEFAULT_VALUE, false
+        return DEFAULT_RETURN_VALUE, false
     }
 
     use_float := left_is_float || right_is_float
@@ -154,5 +154,5 @@ _evaluate_math :: proc(state: ^State, operation: Token_Type, left: Value, right:
         }
     }
 
-    return DEFAULT_VALUE, false
+    return DEFAULT_RETURN_VALUE, false
 }

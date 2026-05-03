@@ -29,6 +29,9 @@ lib:
 	@printf "\033[33m\nBuilding a static library is not recommended unless planning to use in other languages.\n"
 	@printf "Consider using Git submodules or adding the source code to your Odin 'shared' collection.\033[0m\n\n"
 
+test:
+	$(CC) test tests
+
 run: build
 	build/simp
 

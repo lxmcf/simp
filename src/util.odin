@@ -308,7 +308,7 @@ _has_var :: proc(state: ^State, name: string) -> bool {
 _get_var :: proc(state: ^State, name: string) -> Value {
     scopes_len := len(state.scopes)
     if scopes_len == 0 {
-        return DEFAULT_VALUE
+        return DEFAULT_RETURN_VALUE
     }
 
     if existing_slot, exists := state.scopes[scopes_len - 1][name]; exists {
@@ -327,7 +327,7 @@ _get_var :: proc(state: ^State, name: string) -> Value {
         }
     }
 
-    return DEFAULT_VALUE
+    return DEFAULT_RETURN_VALUE
 }
 
 _resolve_pointer_value :: #force_inline proc "contextless" (slot: Variable_Slot) -> Value {
@@ -494,4 +494,38 @@ _is_truthy :: #force_inline proc(value: Value) -> bool {
     }
 
     return false
+}
+
+_get_value_type :: proc(val: Value) -> Type_Value {
+    #partial switch _ in val {
+    case int:
+        return .Int
+
+    case f64:
+        return .Float
+
+    case string:
+        return .String
+
+    case bool:
+        return .Bool
+
+    case ^Object:
+        return .Object
+
+    case ^Array:
+        return .Array
+
+    case rawptr:
+        return .Pointer
+
+    case Null_Value:
+        return .Null
+
+    case Type_Value:
+        return .Type
+
+    case:
+        return .Null
+    }
 }

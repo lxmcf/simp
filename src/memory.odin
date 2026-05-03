@@ -112,6 +112,7 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
                     } else if block_ref.type == .None && len(stack) > 0 && stack[len(stack) - 1].type == .Else {
                         else_key_idx := block_ref.index
                         if_brace_idx := pop(&stack).index
+
                         jump_table[else_key_idx] = token_index
                         jump_table[if_brace_idx] = token_index
                         jump_table[token_index] = else_key_idx
@@ -121,9 +122,10 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
                         jump_table[token_index] = block_ref.index
 
                         if block_ref.breaks != nil {
-                            for b in block_ref.breaks {
-                                jump_table[b] = token_index
+                            for block_idx in block_ref.breaks {
+                                jump_table[block_idx] = token_index
                             }
+
                             delete(block_ref.breaks)
                         }
                     }
@@ -138,6 +140,7 @@ _compute_tables :: proc(tokens: []Token, allocator := context.allocator) -> []in
                     } else {
                         jump_table[token_index] = stack[i].index
                     }
+
                     break
                 }
             }

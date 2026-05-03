@@ -8,19 +8,7 @@ import "core:path/filepath"
 import "core:strings"
 import db "debug"
 
-// TODO: Make more helpers
 ANSI_RESET :: "\033[0m"
-ANSI_RED :: "\033[31m"
-ANSI_GREEN :: "\033[32m"
-ANSI_YELLOW :: "\033[33m"
-ANSI_GRAY_ITALIC :: "\033[3;90m"
-
-ANSI_CYAN_BOLD :: "\033[36m\033[1m"
-ANSI_MAGENTA_BOLD :: "\033[35m\033[1m"
-ANSI_BLUE_BOLD :: "\033[34m\033[1m"
-ANSI_GREEN_BOLD :: "\033[32m\033[1m"
-
-ANSI_CLEAR_LINE :: "\r\033[2K"
 ANSI_DISABLE_MOUSE :: "\033[?1000l\033[?1006l"
 
 Mode :: enum {
@@ -53,7 +41,7 @@ print_usage :: proc() {
     fmt.println("  -c, --compile        Compile the script to bytecode instead of running it")
     fmt.println("  -p, --print          Print the input script to the console instead of running it")
     fmt.println("      --pretty         Syntax highlight the printed script (used with -p)")
-    fmt.println("  -t, --theme <name>   Set the color theme (solarized, dracula, monokai, nord)")
+    fmt.println("  -t, --theme <name>   Set the color theme (solarized, dracula, monokai, nord, vs)")
     fmt.println("      --no-std         Disables loading the standard library for evaluation")
     fmt.println("  -m  --minimal        Disables the builtin REPL functions (")
     fmt.println("  -o, --out <file>     Specify output file for compilation (default: <script>.sbin)")
@@ -61,7 +49,7 @@ print_usage :: proc() {
 
 parse_arguments :: proc() -> (config: Config, should_exit: bool) {
     config.mode = .Run_REPL
-    config.theme = SOLARIZED_THEME // Set a default theme
+    config.theme = THEME_SOLARIZED // Set a default theme
 
     for i := 1; i < len(os.args); i += 1 {
         arg := os.args[i]
@@ -91,16 +79,24 @@ parse_arguments :: proc() -> (config: Config, should_exit: bool) {
                 theme_name := strings.to_lower(os.args[i + 1], context.temp_allocator)
                 switch theme_name {
                 case "solarized":
-                    config.theme = SOLARIZED_THEME
+                    config.theme = THEME_SOLARIZED
+
                 case "dracula":
-                    config.theme = DRACULA_THEME
+                    config.theme = THEME_DRACULA
+
                 case "monokai":
-                    config.theme = MONOKAI_THEME
+                    config.theme = THEME_MONOKAI
+
                 case "nord":
-                    config.theme = NORD_THEME
+                    config.theme = THEME_NORD
+
+                case "vs":
+                    config.theme = THEME_VISUAL_STUDIO
+
                 case:
                     fmt.printfln("Warning: Unknown theme '%s', defaulting to Solarized.", os.args[i + 1])
                 }
+
                 i += 1
             } else {
                 fmt.println("Error: '-t' or '--theme' requires a theme name.")
@@ -120,12 +116,14 @@ parse_arguments :: proc() -> (config: Config, should_exit: bool) {
             if strings.has_prefix(arg, "-") {
                 fmt.printfln("Error: Unknown flag '%s'", arg)
                 print_usage()
+
                 os.exit(1)
             } else if config.input_file == "" {
                 config.input_file = arg
             } else {
                 fmt.printfln("Error: Unexpected argument '%s'", arg)
                 print_usage()
+
                 os.exit(1)
             }
         }
@@ -259,7 +257,7 @@ run_compile_logic :: proc(input_path: string, output_path: string) {
 }
 
 run_repl :: proc(state: ^simp.State, theme: Theme) {
-    fmt.print(ANSI_GREEN_BOLD)
+    fmt.print(theme.comment)
     fmt.println("=======================================")
     fmt.println("                SIMP REPL              ")
     fmt.println("                                       ")
@@ -444,6 +442,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
             is_in_multiline = true
             strings.write_string(&builder, theme.comment)
             strings.write_string(&builder, "---")
+
             index += 3
             continue
         }
@@ -461,6 +460,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
                     index += 1
                     break
                 }
+
                 index += 1
             }
 
@@ -474,10 +474,12 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
                 current_char := input[index]
                 strings.write_byte(&builder, current_char)
                 index += 1
+
                 if current_char == '\n' {
                     break
                 }
             }
+
             strings.write_string(&builder, ANSI_RESET)
             continue
         }
@@ -485,12 +487,15 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
         if character >= '0' && character <= '9' {
             start_num := index
             dot_count := 0
+
             for index < len(input) && ((input[index] >= '0' && input[index] <= '9') || input[index] == '.') {
                 if input[index] == '.' {
                     dot_count += 1
                 }
+
                 index += 1
             }
+
             color := dot_count > 1 ? theme.error : theme.number
             strings.write_string(&builder, color)
             strings.write_string(&builder, input[start_num:index])
@@ -516,7 +521,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
                 color = theme.declaration
                 expecting_declaration = true
 
-            case "import", "put", "pull", "sleep", "delete", "label", "goto", "new", "exit":
+            case "import", "put", "putln", "pull", "sleep", "delete", "label", "goto", "new", "exit":
                 color = theme.statement
                 expecting_declaration = false
 
@@ -535,12 +540,15 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
                     } else {
                         color = ""
                     }
+
                     expecting_declaration = false
                 } else {
                     lookahead := index
+
                     for lookahead < len(input) && (input[lookahead] == ' ' || input[lookahead] == '\t') {
                         lookahead += 1
                     }
+
                     if lookahead < len(input) && input[lookahead] == '(' {
                         color = theme.function
                     }
@@ -555,7 +563,9 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
                 if theme.text != "" {
                     strings.write_string(&builder, theme.text)
                 }
+
                 strings.write_string(&builder, word)
+
                 if theme.text != "" {
                     strings.write_string(&builder, ANSI_RESET)
                 }
@@ -572,22 +582,28 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
             strings.write_string(&builder, theme.comment)
             strings.write_byte(&builder, ';')
             strings.write_string(&builder, ANSI_RESET)
+
             index += 1
             continue
+
         case '=', '+', '-', '*', '/', '%', '<', '>', '!', '&', '|':
             if theme.operator != "" {
                 strings.write_string(&builder, theme.operator)
             }
+
             strings.write_byte(&builder, character)
             if theme.operator != "" {
                 strings.write_string(&builder, ANSI_RESET)
             }
+
             index += 1
             continue
+
         case '@', '#', '^', '`', '~':
             strings.write_string(&builder, theme.error)
             strings.write_byte(&builder, character)
             strings.write_string(&builder, ANSI_RESET)
+
             index += 1
             continue
         }
@@ -595,6 +611,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
         if theme.text != "" && character != ' ' && character != '\t' {
             strings.write_string(&builder, theme.text)
         }
+
         strings.write_byte(&builder, character)
         if theme.text != "" && character != ' ' && character != '\t' {
             strings.write_string(&builder, ANSI_RESET)
@@ -654,6 +671,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                 current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
                 _render_line(state, current_prompt, input_buffer[:], cursor_position, theme, in_multiline)
             }
+
             continue
         }
 
@@ -667,10 +685,12 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                 for {
                     os.read(os.stdin, byte_read_buffer[:])
                     last_char = byte_read_buffer[0]
+
                     if is_first_sequence_char {
                         first_char = last_char
                         is_first_sequence_char = false
                     }
+
                     if last_char >= 0x40 && last_char <= 0x7E {
                         break
                     }
@@ -683,22 +703,27 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                         if history_index > 0 {
                             history_index -= 1
                             clear(&input_buffer)
+
                             for char_val in history^[history_index] {
                                 append(&input_buffer, u8(char_val))
                             }
+
                             cursor_position = len(input_buffer)
                             trimmed_input := strings.trim_space(string(input_buffer[:]))
                             current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
                             _render_line(state, current_prompt, input_buffer[:], cursor_position, theme, in_multiline)
                         }
+
                     case 'B':
                         // Down
                         if history_index < len(history^) - 1 {
                             history_index += 1
                             clear(&input_buffer)
+
                             for char_val in history^[history_index] {
                                 append(&input_buffer, u8(char_val))
                             }
+
                             cursor_position = len(input_buffer)
                             trimmed_input := strings.trim_space(string(input_buffer[:]))
                             current_prompt = (trimmed_input == "}" || trimmed_input == "else") ? unindented_prompt : normal_prompt
@@ -710,12 +735,14 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                             current_prompt = normal_prompt
                             _render_line(state, current_prompt, input_buffer[:], cursor_position, theme, in_multiline)
                         }
+
                     case 'C':
                         // Right
                         if cursor_position < len(input_buffer) {
                             cursor_position += 1
                             _render_line(state, current_prompt, input_buffer[:], cursor_position, theme, in_multiline)
                         }
+
                     case 'D':
                         // Left
                         if cursor_position > 0 {
@@ -725,6 +752,7 @@ read_interactive_line :: proc(state: ^simp.State, normal_prompt: string, uninden
                     }
                 }
             }
+
             continue
         }
 

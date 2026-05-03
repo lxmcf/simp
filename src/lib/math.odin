@@ -35,7 +35,7 @@ fn_rand :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
 // Returns the absolute simp.Value: ABS(-5) -> 5
 fn_abs :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
     if len(arguments) < 1 {
-        return simp.DEFAULT_VALUE
+        return simp.DEFAULT_RETURN_VALUE
     }
 
     #partial switch actual_value in arguments[0] {
@@ -50,7 +50,7 @@ fn_abs :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.abs(parsed_float)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // sqrt(16) -> 4
@@ -63,7 +63,7 @@ fn_sqrt :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         }
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 fn_sin :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
@@ -73,7 +73,7 @@ fn_sin :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.sin(parsed_float)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 fn_cos :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
@@ -83,7 +83,7 @@ fn_cos :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.cos(parsed_float)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // pow(2, 3) -> 8
@@ -97,7 +97,7 @@ fn_pow :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.pow(base_value, exponent_value)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // min(a, b)
@@ -111,7 +111,7 @@ fn_min :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return left_value < right_value ? arguments[0] : arguments[1]
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // max(a, b)
@@ -125,7 +125,7 @@ fn_max :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return left_value > right_value ? arguments[0] : arguments[1]
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // floor(4.8) -> 4
@@ -136,7 +136,7 @@ fn_floor :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.floor(parsed_float)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // ceil(4.2) -> 5
@@ -145,7 +145,7 @@ fn_ceil :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
     if parsed_float, is_valid := simp.pop_f64(&args); is_valid {
         return math.ceil(parsed_float)
     }
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }
 
 // round(4.5) -> 5
@@ -156,5 +156,5 @@ fn_round :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
         return math.round(parsed_float)
     }
 
-    return simp.DEFAULT_VALUE
+    return simp.DEFAULT_RETURN_VALUE
 }

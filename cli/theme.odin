@@ -16,7 +16,7 @@ Theme :: struct {
 }
 
 // Truecolor Solarized-inspired theme (Subdued, highly readable on light and dark)
-SOLARIZED_THEME :: Theme {
+THEME_SOLARIZED :: Theme {
     text        = "",
     comment     = "\033[3;38;2;147;161;161m", // Base1 (subtle gray, italic)
     string_lit  = "\033[38;2;42;161;152m", // Cyan
@@ -27,12 +27,12 @@ SOLARIZED_THEME :: Theme {
     type_name   = "\033[38;2;181;137;0m", // Yellow
     constant    = "\033[38;2;211;54;130m", // Magenta
     function    = "\033[38;2;38;139;210m", // Blue
-    operator    = "", // Empty string uses default terminal color
+    operator    = "",
     error       = "\033[38;2;220;50;47m", // Red
 }
 
 // Dracula (Vibrant, high contrast, purples and pinks)
-DRACULA_THEME :: Theme {
+THEME_DRACULA :: Theme {
     text        = "",
     comment     = "\033[3;38;2;98;114;164m", // Grey/Blue (Italic)
     string_lit  = "\033[38;2;241;250;140m", // Yellow
@@ -48,7 +48,7 @@ DRACULA_THEME :: Theme {
 }
 
 // Monokai (Classic Sublime Text, warm and punchy)
-MONOKAI_THEME :: Theme {
+THEME_MONOKAI :: Theme {
     text        = "",
     comment     = "\033[3;38;2;117;113;94m", // Brown/Grey (Italic)
     string_lit  = "\033[38;2;230;219;116m", // Yellow
@@ -64,7 +64,7 @@ MONOKAI_THEME :: Theme {
 }
 
 // Nord (Cool, icy, clean aesthetics)
-NORD_THEME :: Theme {
+THEME_NORD :: Theme {
     text        = "",
     comment     = "\033[3;38;2;76;86;106m", // Slate (Italic)
     string_lit  = "\033[38;2;163;190;140m", // Pale Green
@@ -77,4 +77,20 @@ NORD_THEME :: Theme {
     function    = "\033[38;2;136;192;208m", // Frost Blue
     operator    = "\033[38;2;129;161;193m", // Soft Blue
     error       = "\033[38;2;191;97;106m", // Red
+}
+
+// VS Code Modern Dark Theme
+THEME_VISUAL_STUDIO :: Theme {
+    text        = "\033[38;2;212;212;212m", // Light Gray
+    comment     = "\033[3;38;2;106;153;85m", // Green (Italic)
+    string_lit  = "\033[38;2;206;145;120m", // Pale Orange
+    number      = "\033[38;2;181;206;168m", // Pale Green
+    keyword     = "\033[38;2;197;134;192m", // Purple
+    declaration = "\033[38;2;86;156;214m", // Blue
+    statement   = "\033[38;2;197;134;192m", // Purple
+    type_name   = "\033[38;2;78;201;176m", // Teal
+    constant    = "\033[38;2;79;193;255m", // Light Blue
+    function    = "\033[38;2;220;220;170m", // Pale Yellow
+    operator    = "\033[38;2;212;212;212m", // Light Gray
+    error       = "\033[38;2;244;71;71m", // Red
 }

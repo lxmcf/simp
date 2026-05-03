@@ -38,7 +38,7 @@ _advance :: #force_inline proc(parser: ^Parser) -> Token {
 
 _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) -> (Value, bool) {
     if _peek_ahead(parser).type != .LParen {
-        return DEFAULT_VALUE, false
+        return DEFAULT_RETURN_VALUE, false
     }
     _advance(parser)
 
@@ -57,7 +57,7 @@ _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) ->
     }
 
     arguments_slice := state.argument_stack[argument_start_index:]
-    result: Value = DEFAULT_VALUE
+    result: Value = DEFAULT_RETURN_VALUE
     success := false
 
     if native_proc_variant, is_native_function := state.native_procs[name]; is_native_function {
@@ -67,7 +67,7 @@ _evaluate_function_call :: proc(state: ^State, parser: ^Parser, name: string) ->
 
         case Native_Proc_No_Return:
             raw_proc(state, arguments_slice)
-            result = DEFAULT_VALUE
+            result = DEFAULT_RETURN_VALUE
         }
 
         success = true
@@ -84,13 +84,10 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
     statement_index := parser.position
     token := _advance(parser)
 
-    // FIX 1: The Guard must allow Braces to pass through
     if token.type != .Ident && token.type != .LBrace && token.type != .RBrace {
         return fmt.tprintf("Unexpected token '%s'", token.text), false
     }
 
-    // FIX 2: If we start a statement with '{', we just ignore it.
-    // The jump table handles the logic; the parser just needs to move past it.
     if token.type == .LBrace {
         return "", true
     }
@@ -101,11 +98,17 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         fmt.print(value_to_string(evaluated_value))
         return "", true
 
+    case .Putln:
+        evaluated_value := _parse_expression(state, parser)
+        fmt.println(value_to_string(evaluated_value))
+        return "", true
+
     case .Pull:
         prompt_value := _parse_expression(state, parser)
         fmt.print(value_to_string(prompt_value))
         os.flush(os.stdout)
         input_buffer: [1024]u8
+
         if _, read_error := os.read(os.stdin, input_buffer[:]); read_error != nil {
             return fmt.tprintf("Failed to pull text: %v", read_error), false
         }
@@ -116,6 +119,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if sleep_time_ms, time_is_valid := value_as_f64(evaluated_value); time_is_valid {
             state.sleep_timer = sleep_time_ms
         }
+
         state.is_sleeping = true
 
     case .Delete:
@@ -123,6 +127,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if id_token.type != .Ident {
             return "Expected identifier after 'delete'", false
         }
+
         target_identifier := id_token.text
 
         if _has_var(state, target_identifier) {
@@ -130,20 +135,21 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
             if object_reference, is_object := variable_value.(^Object); is_object {
                 free_object(state, object_reference)
-                _set_var(state, target_identifier, DEFAULT_VALUE)
+                _set_var(state, target_identifier, DEFAULT_RETURN_VALUE)
             } else if array_reference, is_array := variable_value.(^Array); is_array {
                 free_array(state, array_reference)
-                _set_var(state, target_identifier, DEFAULT_VALUE)
+                _set_var(state, target_identifier, DEFAULT_RETURN_VALUE)
             } else {
-                // If it's a primitive, just set to null
-                _set_var(state, target_identifier, DEFAULT_VALUE)
+                _set_var(state, target_identifier, DEFAULT_RETURN_VALUE)
             }
         } else if target_identifier in state.functions {
-            function := state.functions[target_identifier] // Copy the struct
+            function := state.functions[target_identifier]
+
             for argument in function.arguments {
                 delete(argument)
             }
-            delete(function.arguments) // <-- CRITICAL FIX: Delete the slice itself
+
+            delete(function.arguments)
             delete_key(&state.functions, target_identifier)
         } else if target_identifier in state.native_procs {
             delete_key(&state.native_procs, target_identifier)
@@ -160,8 +166,10 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             state.exit_value = 0
             state.log_proc(.Warning, "Exit code must be an integer, defaulting to 0", token.line)
         }
+
         state.should_close = true
         state.is_exiting = true
+
         return "", true
 
     case .Label:
@@ -170,6 +178,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             return "Expected identifier after 'label'", false
         }
+
         return "", true
 
     case .Goto:
@@ -177,12 +186,15 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if target_token.type != .Ident {
             return "Expected identifier after 'goto'", false
         }
+
         target := state.jump_table[statement_index]
+
         if target != -1 {
             parser.position = target
         } else {
             return fmt.tprintf("Label '%s' not found", target_token.text), false
         }
+
         return "", true
 
     case .Let:
@@ -190,18 +202,23 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if id_token.type != .Ident {
             return "Expected identifier after 'let'", false
         }
+
         first_identifier := id_token.text
+
         if slot, exists := _get_slot(state, first_identifier); exists {
             if slot.decl_pc != statement_index {
                 return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", first_identifier), false
             }
         }
+
         if _peek_ahead(parser).type == .Equals {
             _advance(parser)
             _set_var(state, first_identifier, _parse_expression(state, parser), false, statement_index)
             return "", true
         }
+
         _parse_assignment(state, parser, first_identifier)
+
         return "", true
 
     case .Const:
@@ -209,17 +226,22 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if identifier_token.type != .Ident {
             return "Expected identifier after 'const'", false
         }
+
         if slot, exists := _get_slot(state, identifier_token.text); exists {
             if slot.decl_pc != statement_index {
                 return fmt.tprintf("Variable '%s' already exists and cannot be redeclared", identifier_token.text), false
             }
         }
+
         if _peek_ahead(parser).type != .Equals {
             return "'const' requires an assignment", false
         }
+
         _advance(parser)
+
         evaluated_value := _parse_expression(state, parser)
         _set_var(state, identifier_token.text, evaluated_value, true, statement_index)
+
         return "", true
 
     case .While:
@@ -230,29 +252,40 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
 
         if !_is_truthy(condition_value) {
             target := state.jump_table[statement_index]
+
             if target != -1 {
                 parser.position = target + 1
             } else {
                 _skip_block_forward(parser)
             }
         }
+
         return "", true
 
     case .For:
+        has_parens := false
+        if _peek_ahead(parser).type == .LParen {
+            _advance(parser)
+            has_parens = true
+        }
+
         id_token := _advance(parser)
         if id_token.type != .Ident {
             return "Expected identifier after 'for'", false
         }
+
         identifier := id_token.text
         if _peek_ahead(parser).type == .Equals {
             _advance(parser)
         } else {
             return "Expected '=' after identifier in 'for' loop", false
         }
+
         start_value := _parse_expression(state, parser)
         if _peek_ahead(parser).keyword == .To {
             _advance(parser)
         }
+
         end_value := _parse_expression(state, parser)
 
         step_value: Value = int(1)
@@ -260,23 +293,39 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             _advance(parser)
             step_value = _parse_expression(state, parser)
         }
+
+        if has_parens {
+            if _peek_ahead(parser).type == .RParen {
+                _advance(parser)
+            } else {
+                return "Expected ')' to close 'for' conditional", false
+            }
+        }
+
+        if _peek_ahead(parser).type == .LBrace {
+            _advance(parser)
+        }
+
         if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
 
         initialization_key := fmt.tprintf("__for_init_%d", statement_index)
         _, is_initialized := _get_var(state, initialization_key).(bool)
+
         if !is_initialized {
             _set_var(state, identifier, start_value)
             _set_var(state, initialization_key, true)
         } else {
             current_value := _get_var(state, identifier)
             next_value, _ := _evaluate_math(state, .Plus, current_value, step_value)
+
             _set_var(state, identifier, next_value)
         }
 
         current_value := _get_var(state, identifier)
         continue_loop := false
+
         current_float_value, is_current_float := value_as_f64(current_value)
         end_float_value, is_end_float := value_as_f64(end_value)
         step_float_value, is_step_float := value_as_f64(step_value)
@@ -296,28 +345,53 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 _skip_block_forward(parser)
             }
-            _set_var(state, initialization_key, DEFAULT_VALUE)
+
+            _set_var(state, initialization_key, DEFAULT_RETURN_VALUE)
         }
+
         return "", true
 
     case .Foreach:
+        has_parens := false
+        if _peek_ahead(parser).type == .LParen {
+            _advance(parser)
+            has_parens = true
+        }
+
         key_token := _advance(parser)
         if key_token.type != .Ident {
             return "Expected key identifier after 'foreach'", false
         }
+
         key_identifier := key_token.text
         if _peek_ahead(parser).type == .Comma {
             _advance(parser)
         }
+
         value_token := _advance(parser)
         if value_token.type != .Ident {
             return "Expected value identifier in 'foreach' loop", false
         }
+
         value_identifier := value_token.text
         if _peek_ahead(parser).keyword == .In {
             _advance(parser)
         }
+
         object_value := _parse_expression(state, parser)
+
+        if has_parens {
+            if _peek_ahead(parser).type == .RParen {
+                _advance(parser)
+            } else {
+                return "Expected ')' to close 'foreach' conditional", false
+            }
+        }
+
+        if _peek_ahead(parser).type == .LBrace {
+            _advance(parser)
+        }
+
         if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
@@ -346,11 +420,13 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 return "'foreach' loop requires an object, array, or string", false
             }
+
             _set_var(state, keys_key, keys_object)
             _set_var(state, initialization_key, true)
             _set_var(state, index_key, int(0))
         } else {
             index_value := _get_var(state, index_key)
+
             if index, is_index_valid := value_as_int(index_value); is_index_valid {
                 _set_var(state, index_key, int(index + 1))
             }
@@ -359,16 +435,19 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         index_value := _get_var(state, index_key)
         keys_object_value := _get_var(state, keys_key)
         continue_loop := false
+
         if index, is_index_valid := value_as_int(index_value); is_index_valid {
             if keys_object, is_keys_object_valid := keys_object_value.(^Object); is_keys_object_valid {
                 if index < len(keys_object^) {
                     continue_loop = true
                     key_value := keys_object^[fmt.tprintf("%d", index)]
+
                     if object_reference, is_object := object_value.(^Object); is_object {
                         if key_string, is_key_string := key_value.(string); is_key_string {
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, key_string)
                             }
+
                             if value_identifier != "_" {
                                 _set_var(state, value_identifier, object_reference^[key_string])
                             }
@@ -378,6 +457,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
+
                             if value_identifier != "_" {
                                 _set_var(state, value_identifier, array_reference^[key_number])
                             }
@@ -387,6 +467,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                             if key_identifier != "_" {
                                 _set_var(state, key_identifier, int(key_number))
                             }
+
                             if value_identifier != "_" {
                                 char_string := string_reference[key_number:key_number + 1]
                                 _set_var(state, value_identifier, char_string)
@@ -404,7 +485,8 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             } else {
                 _skip_block_forward(parser)
             }
-            _set_var(state, initialization_key, DEFAULT_VALUE)
+
+            _set_var(state, initialization_key, DEFAULT_RETURN_VALUE)
         }
         return "", true
 
@@ -413,6 +495,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         if target != -1 {
             parser.position = token.keyword == .Break ? target + 1 : target
         }
+
         return "", true
 
     case .Function:
@@ -436,16 +519,17 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                 append(&arguments, "...")
                 break
             }
+
             append(&arguments, next_token.text)
             if _peek_ahead(parser).type == .Comma {
                 _advance(parser)
             }
         }
+
         if _advance(parser).type != .RParen {
             return "Expected ')' after arguments", false
         }
 
-        // FIX 3: Consume opening brace for function definition
         if _peek_ahead(parser).type == .LBrace {
             _advance(parser)
         }
@@ -466,11 +550,13 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
         } else {
             _skip_block_forward(parser)
         }
+
         return "", true
 
     case .Return:
         state.return_value = _parse_expression(state, parser)
         state.is_returning = true
+
         return "", true
 
     case .If:
@@ -495,6 +581,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                 } else {
                     _skip_block_forward(parser)
                 }
+
                 return "", true
             }
         } else if _peek_ahead(parser).keyword == .Then {
@@ -507,16 +594,17 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
                     if next_tok == .Newline {
                         break
                     }
+
                     _advance(parser)
                 }
             }
+
             return "", true
         }
-        return "Expected '{' or 'then' after if condition", false
+
+        return "Expected '{' or 'then' after if conditional", false
 
     case .Else:
-        // If the interpreter hits 'else' without jumping to it, it means
-        // the 'if' block just finished. We must jump over the 'else' block.
         target := state.jump_table[statement_index]
         if target != -1 {
             parser.position = target + 1
@@ -524,8 +612,10 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             if _peek_ahead(parser).type == .LBrace {
                 _advance(parser)
             }
+
             _skip_block_forward(parser)
         }
+
         return "", true
 
     case .None:
@@ -533,20 +623,20 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             target := state.jump_table[statement_index]
             if target != -1 {
                 if target < statement_index {
-                    // Backward jump (Loops / Functions)
                     start_tok := state.tokens[target]
                     is_loop := start_tok.keyword == .While || start_tok.keyword == .For || start_tok.keyword == .Foreach
+
                     if is_loop {
                         parser.position = target
                     } else if start_tok.keyword == .Function {
                         state.is_returning = true
-                        state.return_value = DEFAULT_VALUE
+                        state.return_value = DEFAULT_RETURN_VALUE
                     }
                 } else {
-                    // Forward jump (End of an IF block jumping over the ELSE block)
                     parser.position = target
                 }
             }
+
             return "", true
         }
 
@@ -557,6 +647,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             if token.text != "_" && !_has_var(state, token.text) {
                 return fmt.tprintf("Undeclared variable '%s'!", token.text), false
             }
+
             _parse_assignment(state, parser, token.text)
             return "", true
         }
@@ -566,6 +657,7 @@ _parse_statement :: proc(state: ^State, parser: ^Parser) -> (message: string, ok
             if !success {
                 return fmt.tprintf("Expected '(' after '%s'", token.text), false
             }
+
             return "", true
         }
 
@@ -596,6 +688,7 @@ _parse_expression :: proc(state: ^State, parser: ^Parser) -> Value {
 
     for _peek_ahead(parser).type == .Or {
         _advance(parser)
+
         right := _parse_and(state, parser)
         left = _is_truthy(left) || _is_truthy(right)
     }
@@ -608,6 +701,7 @@ _parse_and :: proc(state: ^State, parser: ^Parser) -> Value {
 
     for _peek_ahead(parser).type == .And {
         _advance(parser)
+
         right := _parse_comparison(state, parser)
         left = _is_truthy(left) && _is_truthy(right)
     }
@@ -617,13 +711,72 @@ _parse_and :: proc(state: ^State, parser: ^Parser) -> Value {
 
 _parse_comparison :: proc(state: ^State, parser: ^Parser) -> Value {
     left := _parse_sum(state, parser)
+
     token := _peek_ahead(parser)
+    is_cmp := token.type == .Equals || token.type == .DoubleEquals || token.type == .NotEqual || token.type == .Less || token.type == .Greater || token.type == .LessEqual || token.type == .GreaterEqual
 
-    is_comparison_operation := token.type == .Equals || token.type == .DoubleEquals || token.type == .NotEqual || token.type == .Less || token.type == .Greater || token.type == .LessEqual || token.type == .GreaterEqual
+    is_in := token.keyword == .In
+    is_not_in := token.keyword == .Not && _peek_ahead(parser, 1).keyword == .In
 
-    if is_comparison_operation {
-        operation := _advance(parser).type
+    if is_cmp || is_in || is_not_in {
+        is_negated := false
+        operation: Token_Type = .None
+
+        if is_not_in {
+            _advance(parser) // skip 'not'
+            _advance(parser) // skip 'in'
+
+            is_negated = true
+        } else if is_in {
+            _advance(parser) // skip 'in'
+        } else {
+            operation = _advance(parser).type
+        }
+
+        if (is_in || is_not_in) && _peek_ahead(parser).type == .LParen {
+            _advance(parser) // skip '('
+            found := false
+
+            for _peek_ahead(parser).type != .RParen && _peek_ahead(parser).type != .EOF {
+                item_val := _parse_expression(state, parser)
+                if !found && values_are_equal(left, item_val) {
+                    found = true
+                }
+
+                if _peek_ahead(parser).type == .Comma {
+                    _advance(parser)
+                }
+            }
+
+            if _peek_ahead(parser).type == .RParen {
+                _advance(parser)
+            }
+
+            return is_negated ? !found : found
+        }
+
         right := _parse_sum(state, parser)
+
+        if is_in || is_not_in {
+            found := false
+
+            if arr, arr_ok := right.(^Array); arr_ok {
+                for item in arr^ {
+                    if values_are_equal(left, item) {
+                        found = true
+                        break
+                    }
+                }
+            } else if obj, obj_ok := right.(^Object); obj_ok {
+                key := _to_key(left)
+                _, found = obj^[key]
+            } else if str, ok := right.(string); ok {
+                left_str := value_to_string(left)
+                found = strings.contains(str, left_str)
+            }
+
+            return is_negated ? !found : found
+        }
 
         if operation == .Equals || operation == .DoubleEquals {
             return values_are_equal(left, right)
@@ -640,13 +793,10 @@ _parse_comparison :: proc(state: ^State, parser: ^Parser) -> Value {
             #partial switch (operation) {
             case .Less:
                 return left_number < right_number
-
             case .Greater:
                 return left_number > right_number
-
             case .LessEqual:
                 return left_number <= right_number
-
             case .GreaterEqual:
                 return left_number >= right_number
             }
@@ -691,7 +841,7 @@ _parse_multiply :: proc(state: ^State, parser: ^Parser) -> Value {
 
 _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
     token := _advance(parser)
-    value: Value = DEFAULT_VALUE
+    value: Value = DEFAULT_RETURN_VALUE
 
     #partial switch token.type {
     case .Ellipsis:
@@ -730,7 +880,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 delete(error_message)
                 state.should_close = true
 
-                return DEFAULT_VALUE
+                return DEFAULT_RETURN_VALUE
             }
 
         case .Pull:
@@ -780,8 +930,8 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
             if _peek_ahead(parser).type == .LBrace {
                 _advance(parser)
             }
-            new_array := create_array(state)
 
+            new_array := create_array(state)
             for _peek_ahead(parser).type != .EOF {
                 if _peek_ahead(parser).type == .RBrace {
                     _advance(parser)
@@ -797,12 +947,14 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 new_value := _parse_expression(state, parser)
                 append(new_array, new_value)
             }
+
             value = new_array
 
         case .Object:
             if _peek_ahead(parser).type == .LBrace {
                 _advance(parser)
             }
+
             new_object := create_object(state)
             array_index := 0
 
@@ -825,11 +977,13 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
 
                 if is_key_value {
                     key := _advance(parser).text
+
                     _advance(parser) // skip =
                     _set_object_value(state, new_object, key, _parse_expression(state, parser))
                 } else {
                     new_value := _parse_expression(state, parser)
                     key := fmt.tprintf("%d", array_index)
+
                     _set_object_value(state, new_object, key, new_value)
                     array_index += 1
                 }
@@ -851,7 +1005,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                         delete(error_message)
                         state.should_close = true
 
-                        return DEFAULT_VALUE
+                        return DEFAULT_RETURN_VALUE
                     }
                 } else {
                     new_value, success := _evaluate_function_call(state, parser, name)
@@ -861,7 +1015,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                         state.should_close = true
                         delete(message)
 
-                        return DEFAULT_VALUE
+                        return DEFAULT_RETURN_VALUE
                     }
 
                     value = new_value
@@ -873,7 +1027,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                     state.should_close = true
                     delete(message)
 
-                    return DEFAULT_VALUE
+                    return DEFAULT_RETURN_VALUE
                 }
 
                 value = _get_var(state, name)
@@ -896,7 +1050,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
             return -value_integer
         }
 
-        return DEFAULT_VALUE
+        return DEFAULT_RETURN_VALUE
 
     case .Not:
         inner_value := _parse_factor(state, parser)
@@ -919,10 +1073,10 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 if new_value, exists := object_reference^[property]; exists {
                     value = new_value
                 } else {
-                    value = DEFAULT_VALUE
+                    value = DEFAULT_RETURN_VALUE
                 }
             } else {
-                value = DEFAULT_VALUE
+                value = DEFAULT_RETURN_VALUE
             }
 
         } else if next_token_type == .LBracket {
@@ -938,7 +1092,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 if new_value, exists := object_reference^[key]; exists {
                     value = new_value
                 } else {
-                    value = DEFAULT_VALUE
+                    value = DEFAULT_RETURN_VALUE
                 }
             } else if array_reference, is_array := value.(^Array); is_array {
                 if array_index, is_number := value_as_int(index_value); is_number {
@@ -955,10 +1109,10 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                         state.log_proc(.Warning, warning_msg, bracket_token.line)
                         delete(warning_msg)
 
-                        value = DEFAULT_VALUE
+                        value = DEFAULT_RETURN_VALUE
                     }
                 } else {
-                    value = DEFAULT_VALUE
+                    value = DEFAULT_RETURN_VALUE
                 }
             } else if string_reference, is_string := value.(string); is_string {
                 if string_index, is_number := value_as_int(index_value); is_number {
@@ -975,13 +1129,13 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                         state.log_proc(.Warning, warning_msg, bracket_token.line)
                         delete(warning_msg)
 
-                        value = DEFAULT_VALUE
+                        value = DEFAULT_RETURN_VALUE
                     }
                 } else {
-                    value = DEFAULT_VALUE
+                    value = DEFAULT_RETURN_VALUE
                 }
             } else {
-                value = DEFAULT_VALUE
+                value = DEFAULT_RETURN_VALUE
             }
         } else if next_token_type == .DoubleColon {
             _advance(parser) // skip ::
@@ -993,7 +1147,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 delete(error_message)
                 state.should_close = true
 
-                return DEFAULT_VALUE
+                return DEFAULT_RETURN_VALUE
             }
 
             type_name := type_token.text
@@ -1093,7 +1247,7 @@ _parse_factor :: proc(state: ^State, parser: ^Parser) -> Value {
                 delete(error_message)
                 state.should_close = true
 
-                return DEFAULT_VALUE
+                return DEFAULT_RETURN_VALUE
             }
         }
     }
@@ -1149,7 +1303,7 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
 
             if object_reference, is_object := parent_value.(^Object); is_object {
                 if operation != .Equals {
-                    current_value: Value = DEFAULT_VALUE
+                    current_value: Value = DEFAULT_RETURN_VALUE
                     if existing_value, exists := object_reference^[key]; exists {
                         current_value = existing_value
                     }
@@ -1202,7 +1356,7 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                 if new_value, exists := object_reference^[key]; exists {
                     parent_value = new_value
                 } else {
-                    parent_value = DEFAULT_VALUE
+                    parent_value = DEFAULT_RETURN_VALUE
                 }
             } else if array_reference, is_array := parent_value.(^Array); !is_dot && is_array {
                 if array_index, is_valid := strconv.parse_int(key, 10); is_valid {
@@ -1214,10 +1368,10 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                     if actual_index >= 0 && actual_index < len(array_reference^) {
                         parent_value = array_reference^[actual_index]
                     } else {
-                        parent_value = DEFAULT_VALUE
+                        parent_value = DEFAULT_RETURN_VALUE
                     }
                 } else {
-                    parent_value = DEFAULT_VALUE
+                    parent_value = DEFAULT_RETURN_VALUE
                 }
             } else if string_reference, is_string := parent_value.(string); !is_dot && is_string {
                 if string_index, is_valid := strconv.parse_int(key, 10); is_valid {
@@ -1229,13 +1383,13 @@ _parse_assignment :: proc(state: ^State, parser: ^Parser, first_identifier: stri
                     if actual_index >= 0 && actual_index < len(string_reference) {
                         parent_value = string_reference[actual_index:actual_index + 1]
                     } else {
-                        parent_value = DEFAULT_VALUE
+                        parent_value = DEFAULT_RETURN_VALUE
                     }
                 } else {
-                    parent_value = DEFAULT_VALUE
+                    parent_value = DEFAULT_RETURN_VALUE
                 }
             } else {
-                parent_value = DEFAULT_VALUE
+                parent_value = DEFAULT_RETURN_VALUE
             }
         }
     }
@@ -1315,7 +1469,7 @@ _call_user_function :: proc(state: ^State, parser: ^Parser, name: string, argume
 
     result := state.return_value
     state.is_returning = false
-    state.return_value = DEFAULT_VALUE
+    state.return_value = DEFAULT_RETURN_VALUE
 
     popped_scope := pop(&state.scopes)
 

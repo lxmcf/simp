@@ -13,9 +13,7 @@ SIMP is designed to be as simple as possible, to the point there are 0 functions
 ```lua
 function print (...) {
 	foreach idx, arg in ... {
-		if idx > 0 {
-			put " "
-		}
+		if idx > 0 then put " "
 
 		put arg
 	}
@@ -38,4 +36,4 @@ For now, SIMP only offers an Odin implementation; as shown in the `examples` dir
 
 Documentation is for losers, just look at the examples and start slapping something together...
 
-_More documentation is in the works to highlight everything the language offers but this is a toy scripting language and I do not take this seriously at all_
+_More documentation is in the works to highlight everything the language offers and can be found [HERE](/docs/README.md), but this is a toy scripting language and I do not take this seriously at all_

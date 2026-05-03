@@ -82,7 +82,7 @@ contexts:
 
   # --- STATEMENTS ---
   statements:
-    - match: '\b(import|put|pull|sleep|delete|label|goto|new|exit)\b'
+    - match: '\b(import|put|putln|pull|sleep|delete|label|goto|new|exit)\b'
       scope: keyword.other.statement.simp
 
   # --- KEYWORDS ---

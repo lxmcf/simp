@@ -9,6 +9,7 @@ import "core:strings"
 
 Token_Type :: distinct enum {
     EOF,
+    None,
     Ident,
     Number,
     String,
@@ -52,6 +53,7 @@ Token_Keyword :: distinct enum {
     // STATEMENTS
     Import,
     Put,
+    Putln, // I did not really want to add this but it was too annoying always having to go '+ "\n"'
     Pull,
     Sleep,
     Delete,
@@ -518,6 +520,8 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
                     keyword = .Import
                 case "put":
                     keyword = .Put
+                case "putln":
+                    keyword = .Putln
                 case "pull":
                     keyword = .Pull
                 case "sleep":
