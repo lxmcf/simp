@@ -2,6 +2,8 @@
 
 # Documentation
 
+SIMP is a very small but somewhat powerful language out of the box, by default there is not standard library (However there is one), this documentation will not cover this library and focus purely on the language.
+
 ### Types
 
 ---
@@ -82,6 +84,21 @@ const obj = object { my_name_is = "what?" }
 obj.my_name_is = "who?"
 ```
 
+### Comments
+
+---
+
+SIMP supports 2 forms of comments, single line and multi line. Single line is defined by the using `//` however multi line is done using `---`, this multi line format is a psuedo way to make it easier to potentially port over lua code given the language similarities and is not final.
+
+```lua
+// This is a single line comment
+
+---
+    This is a multi
+    line comment!
+---
+```
+
 ### Type Casting
 
 ---
@@ -124,4 +141,40 @@ const obj = object {
 }
 
 putln obj::string
+```
+
+### Control Flow and Loops
+
+---
+
+SIMP supports standard most forms of control flow and loops, from the simple `if` statement to `foreach`, depending on the types; some loops may have different behaviour as shown for the `foreach` statement and strings...
+
+```lua
+let shall_i_pass = false
+
+if shall_i_pass {
+    putln "YOU SHALL PASS... SOMEHOW"
+} else {
+    putln "YOU SHALL NOT PASS"
+}
+
+--- Outputs numbers: 1, 2, 3, 4, 5
+for i = 0 to 5 {
+    putln i
+}
+
+-- Outputs numners: 0, 2, 4, 6, 8 ,10
+for i = 0 to 10 step 2 {
+    putln i
+}
+
+let arr = array { "how", "can", "we", "sleep" }
+foreach idx, str in arr {
+    putln "[" + idx + "]: " + str
+}
+
+let msg = "when the beds are burning"
+foreach idx, char in msg {
+    putln "[" + idx + "]: " + char
+}
 ```
