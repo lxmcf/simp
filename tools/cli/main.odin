@@ -1,7 +1,7 @@
 package main
 
-import simp "../src"
-import lib "../src/lib"
+import simp "../../src"
+import lib "../../src/lib"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"

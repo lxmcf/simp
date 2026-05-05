@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 
-import simp "../src"
+import simp "../../src"
 
 cmd_vars :: proc(state: ^simp.State, arguments: []simp.Value) {
     fmt.println("\n--- Global Variables ---")

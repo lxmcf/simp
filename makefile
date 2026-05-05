@@ -20,7 +20,7 @@ endif
 
 build:
 	mkdir -p build
-	$(CC) build cli/ -out:build/simp $(C_FLAGS) -o:$(OPT)
+	$(CC) build tools/cli/ -out:build/simp $(C_FLAGS) -o:$(OPT)
 
 lib:
 	mkdir -p build

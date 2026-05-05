@@ -72,7 +72,9 @@ object_has :: proc(target: ^Object, key: string) -> bool {
 }
 
 array_append :: proc(state: ^State, target: ^Array, value: Value) {
-    if target == nil do return
+    if target == nil {
+        return
+    }
 
     value_to_store := value
     if str, is_str := value.(string); is_str {
