@@ -38,6 +38,68 @@ bind_variable :: proc(state: ^State, name: string, value: Value, is_const := fal
 }
 
 // -----------------------------------------------------------------------------
+// Arrays & Objects
+// -----------------------------------------------------------------------------
+
+object_set :: proc(state: ^State, target: ^Object, key: string, value: Value) {
+    if target == nil {
+        return
+    }
+
+    value_to_store := value
+    if str, is_str := value.(string); is_str {
+        value_to_store = intern_string(state, str)
+    }
+
+    if key in target^ {
+        target^[key] = value_to_store
+    } else {
+        target^[intern_string(state, key)] = value_to_store
+    }
+}
+
+object_get :: proc(target: ^Object, key: string) -> (Value, bool) {
+    if target == nil {
+        return DEFAULT_RETURN_VALUE, false
+    }
+
+    val, ok := target^[key]
+    return val, ok
+}
+
+object_has :: proc(target: ^Object, key: string) -> bool {
+    return target == nil ? false : key in target^
+}
+
+array_append :: proc(state: ^State, target: ^Array, value: Value) {
+    if target == nil do return
+
+    value_to_store := value
+    if str, is_str := value.(string); is_str {
+        value_to_store = intern_string(state, str)
+    }
+
+    append(target, value_to_store)
+}
+
+array_get :: proc(target: ^Array, index: int) -> (Value, bool) {
+    if target == nil {
+        return DEFAULT_RETURN_VALUE, false
+    }
+
+    if index >= 0 && index < len(target^) {
+        return target^[index], true
+    }
+
+    return DEFAULT_RETURN_VALUE, false
+}
+
+array_length :: proc(target: ^Array) -> int {
+    return target == nil ? 0 : len(target^)
+}
+
+
+// -----------------------------------------------------------------------------
 // Argument Popping
 // -----------------------------------------------------------------------------
 

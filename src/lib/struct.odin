@@ -3,24 +3,8 @@ package lib
 import simp "../"
 
 load_struct_library :: proc(state: ^simp.State) {
-    simp.bind_native_proc(state, "has_key", fn_has_key)
     simp.bind_native_proc(state, "push", fn_push)
     simp.bind_native_proc(state, "pop", fn_pop)
-}
-
-// has_key(object_reference, "key")
-fn_has_key :: proc(state: ^simp.State, arguments: []simp.Value) -> simp.Value {
-    args := arguments
-
-    if object_reference, is_object := simp.pop_object(&args); is_object {
-        if len(args) > 0 {
-            key := simp.value_to_string(args[0])
-
-            return key in object_reference
-        }
-    }
-
-    return false
 }
 
 // push(array_reference, value) -> Appends a value to an array
