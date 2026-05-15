@@ -253,6 +253,10 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
                     }
                     char_index += 1
                 }
+            } else if char_index + 1 < len(script) && script[char_index + 1] == '-' {
+                for char_index < len(script) && script[char_index] != '\n' && script[char_index] != '\r' {
+                    char_index += 1
+                }
             } else if char_index + 1 < len(script) && script[char_index + 1] == '=' {
                 append(&tokens, Token{type = .MinusEquals, keyword = .None, text = "-=", line = line_number})
                 char_index += 2
@@ -271,11 +275,7 @@ _tokenise :: proc(state: ^State, script: string) -> ([]Token, bool) {
             }
 
         case '/':
-            if char_index + 1 < len(script) && script[char_index + 1] == '/' {
-                for char_index < len(script) && script[char_index] != '\n' && script[char_index] != '\r' {
-                    char_index += 1
-                }
-            } else if char_index + 1 < len(script) && script[char_index + 1] == '=' {
+            if char_index + 1 < len(script) && script[char_index + 1] == '=' {
                 append(&tokens, Token{type = .SlashEquals, keyword = .None, text = "/=", line = line_number})
                 char_index += 2
             } else {

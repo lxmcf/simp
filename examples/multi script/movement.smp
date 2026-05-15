@@ -7,6 +7,6 @@ while true {
     if player_x > 700 then direction = -1
     if player_x < 100 then direction = 1
 
-    // Halt execution for 1 step/frame
+    -- Halt execution for 1 step/frame
     sleep 0
 }

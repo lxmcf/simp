@@ -37,11 +37,11 @@ contexts:
         - match: "---"
           scope: punctuation.definition.comment.end.simp
           pop: true
-    # Single-line comments (// content)
-    - match: //
+    # Single-line comments (-- content)
+    - match: --
       scope: punctuation.definition.comment.simp
       push:
-        - meta_scope: comment.line.double-slash.simp
+        - meta_scope: comment.line.double-dash.simp
         - match: \n
           pop: true
 

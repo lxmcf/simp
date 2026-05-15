@@ -75,11 +75,11 @@ const bar = "Hello simp"
 Variables defined by `let` are always mutable and those defined by `const` are immutable, a constant will work similar to a JavaScript constant where you can declare and array or object as const; however you can still modify the stored data as shown:
 
 ```lua
---- Arrays ---
+-- Arrays
 const arr = array { 7, 0, 0, 8, 5 }
 array[0] = 8
 
---- Objects ---
+-- Objects
 const obj = object { my_name_is = "what?" }
 obj.my_name_is = "who?"
 ```
@@ -88,10 +88,10 @@ obj.my_name_is = "who?"
 
 ---
 
-SIMP supports 2 forms of comments, single line and multi line. Single line is defined by the using `//` however multi line is done using `---`, this multi line format is a psuedo way to make it easier to potentially port over lua code given the language similarities and is not final.
+SIMP supports 2 forms of comments, single line and multi line. Single line is defined by the using `--` however multi line is done using `---`.
 
 ```lua
-// This is a single line comment
+-- This is a single line comment
 
 ---
     This is a multi
@@ -122,7 +122,7 @@ Type casting also has some powerful functionality when it comes to the `type` ty
 If you cast anything to a type, it will return it's type as a value an casting a complex type to a string will return a JSON formatted string:
 
 ```lua
---- Simple type casting ---
+-- Simple type casting
 let my_type = type
 
 my_type = 1::type
@@ -131,7 +131,7 @@ putln "I am an '" + my_type
 my_type = "When in doubt, use brute force."::type
 putln "I am now a '" + my_type
 
---- JSON String casting ---
+-- JSON String casting
 const arr = array { "F", "E", "E", "F" }
 putln arr::string
 

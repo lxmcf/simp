@@ -12,6 +12,6 @@ while true {
 
     set_color (r, g, b)
 
-    // Halt execution for 1 step/frame
+    -- Halt execution for 1 step/frame
     sleep 0
 }

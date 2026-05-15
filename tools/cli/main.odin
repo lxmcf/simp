@@ -353,17 +353,17 @@ get_block_depth_change :: proc(input_line: string, in_multiline: bool = false) -
             continue
         }
 
-        // Ignore comments
-        if !is_in_string && current_char == '/' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '/' {
-            break
-        }
-
         // Multi-line comments
         if !is_in_string && current_char == '-' && char_index + 2 < len(input_line) && input_line[char_index + 1] == '-' && input_line[char_index + 2] == '-' {
             still_in_multiline = true
             char_index += 2
             char_index += 1
             continue
+        }
+
+        // Ignore comments (single line)
+        if !is_in_string && current_char == '-' && char_index + 1 < len(input_line) && input_line[char_index + 1] == '-' {
+            break
         }
 
         // Handle strings so we don't count braces inside them
@@ -468,7 +468,7 @@ highlight_simp_code :: proc(state: ^simp.State, input: string, theme: Theme, sta
             continue
         }
 
-        if character == '/' && index + 1 < len(input) && input[index + 1] == '/' {
+        if character == '-' && index + 1 < len(input) && input[index + 1] == '-' {
             strings.write_string(&builder, theme.comment)
             for index < len(input) {
                 current_char := input[index]

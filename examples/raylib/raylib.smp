@@ -11,7 +11,7 @@ while true {
         reset_player ()
     }
 
-    // Cast bool to int and use as axis for movement
+    -- Cast bool to int and use as axis for movement
     let xaxis = is_key_down ("RIGHT")::int - is_key_down ("LEFT")::int
     let yaxis = is_key_down ("DOWN")::int - is_key_down ("UP")::int
 
@@ -20,6 +20,6 @@ while true {
 
     draw_circle (x, y, 50)
 
-    // Halt execution for 1 step/frame
+    -- Halt execution for 1 step/frame
     sleep 0
 }
